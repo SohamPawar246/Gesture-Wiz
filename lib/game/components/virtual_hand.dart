@@ -12,6 +12,11 @@ import '../palette.dart';
 class VirtualHand extends PositionComponent {
   final Map<int, CircleComponent> _jointComponents = {};
 
+  Color? activeGlowColor;
+  bool _isTracked = false;
+  final List<Offset> _trailPoints = [];
+  final int _maxTrailLen = 14;
+
   // Animation state
   double _flameTime = 0;
 
@@ -58,15 +63,21 @@ class VirtualHand extends PositionComponent {
   }
 
   void updateLandmarks(List<Landmark> landmarks, CoordinateMapper mapper, {double dt = 0.0}) {
-    if (landmarks.length != 21) return;
-
     _flameTime += dt;
+    
+    if (landmarks.length != 21) {
+      _isTracked = false;
+      return;
+    }
+    _isTracked = true;
 
     for (int i = 0; i < 21; i++) {
       final targetScreenPosition = mapper.mapLandmarkToScreen(landmarks[i]);
 
       if (dt > 0 && _jointComponents[i]!.position != Vector2.zero()) {
-        _jointComponents[i]!.position.lerp(targetScreenPosition, (dt * 12.0).clamp(0.0, 1.0));
+        // 28.0 factor: at 60fps (dt≈0.016) → lerp t≈0.45 per frame
+        // Hand visually catches up in ~2-3 frames (~35ms) — feels instant
+        _jointComponents[i]!.position.lerp(targetScreenPosition, (dt * 28.0).clamp(0.0, 1.0));
       } else {
         _jointComponents[i]!.position = targetScreenPosition;
       }
@@ -80,14 +91,47 @@ class VirtualHand extends PositionComponent {
   }
 
   @override
+  void update(double dt) {
+    super.update(dt);
+    if (_isTracked && _jointComponents[8] != null) {
+      final currentPos = _pos(8); // Index fingertip
+      if (_trailPoints.isEmpty || (_trailPoints.last - currentPos).distance > 4.0) {
+        _trailPoints.add(currentPos);
+        if (_trailPoints.length > _maxTrailLen) _trailPoints.removeAt(0);
+      }
+    } else {
+      if (_trailPoints.isNotEmpty) _trailPoints.removeAt(0);
+    }
+  }
+
+  @override
   void render(Canvas canvas) {
     super.render(canvas);
 
     // ======================================================
+    // LAYER 0: MAGIC MOTION TRAIL (Always draw if fading)
+    // ======================================================
+    if (_trailPoints.length > 1) {
+      final trailColor = activeGlowColor ?? Palette.fireGold;
+      for (int i = 0; i < _trailPoints.length - 1; i++) {
+        final double progress = i / (_trailPoints.length - 1);
+        final paint = Paint()
+          ..color = trailColor.withValues(alpha: progress * 0.7)
+          ..strokeWidth = progress * 16.0 + 4.0
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0);
+        canvas.drawLine(_trailPoints[i], _trailPoints[i + 1], paint);
+      }
+    }
+
+    if (!_isTracked) return; // Hide physical hand if not tracked
+
+    // ======================================================
     // LAYER 1: WARM AMBIENT GLOW (behind everything)
     // ======================================================
+    final glowColor = activeGlowColor ?? Palette.glowWarm;
     final glowPaint = Paint()
-      ..color = Palette.glowWarm.withValues(alpha: 0.06 + 0.02 * sin(_flameTime * 2.5))
+      ..color = glowColor.withValues(alpha: 0.12 + 0.03 * sin(_flameTime * 2.5))
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30.0);
 
     // Glow around the palm center

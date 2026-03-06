@@ -61,7 +61,7 @@ class Projectile extends PositionComponent with HasGameReference {
       final dir = target!.position - position;
       final dist = dir.length;
       
-      if (dist < 25.0) {
+      if (dist < 60.0) {
         // Hit!
         _hasHit = true;
         onHit?.call(target!, spell);

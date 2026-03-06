@@ -6,26 +6,41 @@ import '../hand_tracking/landmark_model.dart';
 /// Listens for UDP datagrams from the Python MediaPipe tracker
 /// and decodes them into hand landmark data.
 ///
+/// Key improvements:
+/// - Drains the socket on every callback event (reads all queued packets and
+///   keeps only the freshest one), so the game never operates on stale data.
+/// - Applies exponential temporal smoothing (alpha = 0.55) to raw landmarks,
+///   reducing high-frequency jitter without introducing significant lag.
+///
 /// Supports both the new multi-hand format:
 ///   {"hands": [{"id": 0, "landmarks": [...]}, {"id": 1, "landmarks": [...]}]}
 /// and the legacy single-hand format (array of 21 landmarks).
 class UdpService {
   static const int _port = 5005;
 
+  /// Smoothing factor: 0.0 = no movement (frozen), 1.0 = raw (no smoothing).
+  /// 0.55 gives a good balance — fast enough to feel instant, smooth enough
+  /// to eliminate per-landmark jitter.
+  static const double _smoothAlpha = 0.55;
+
   RawDatagramSocket? _socket;
 
-  /// All detected hands, keyed by hand ID
-  final Map<int, List<Landmark>> _hands = {};
+  /// All detected hands (raw, as received), keyed by hand ID
+  final Map<int, List<Landmark>> _rawHands = {};
+
+  /// Smoothed hands — used by the rest of the game for rendering + recognition
+  final Map<int, List<Landmark>> _smoothedHands = {};
+
   DateTime _lastReceived = DateTime(2000);
 
-  /// Get landmarks for a specific hand (0 or 1)
-  List<Landmark>? getHandLandmarks(int handId) => _hands[handId];
+  /// Get smoothed landmarks for a specific hand (0 or 1)
+  List<Landmark>? getHandLandmarks(int handId) => _smoothedHands[handId];
 
   /// Convenience: get the first (primary) hand
-  List<Landmark>? get latestLandmarks => _hands[0];
+  List<Landmark>? get latestLandmarks => _smoothedHands[0];
 
   /// Number of currently tracked hands
-  int get handCount => _hands.length;
+  int get handCount => _smoothedHands.length;
 
   /// Returns true if we've received data within the last 500ms
   bool get isConnected =>
@@ -35,28 +50,73 @@ class UdpService {
     _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, _port);
     _socket!.listen((RawSocketEvent event) {
       if (event == RawSocketEvent.read) {
-        final datagram = _socket!.receive();
-        if (datagram != null) {
-          _decodeDatagram(datagram);
-        }
+        _drainAndProcess();
       }
     });
   }
 
-  void _decodeDatagram(Datagram datagram) {
+  /// Drain ALL pending packets from the socket in a tight loop.
+  /// This ensures we always act on the freshest possible frame,
+  /// not a packet that has been sitting in the OS buffer.
+  void _drainAndProcess() {
+    // First pass: read everything, keep only the last valid decode per hand.
+    Map<int, List<Landmark>>? freshest;
+
+    while (true) {
+      final datagram = _socket?.receive();
+      if (datagram == null) break;
+
+      final decoded = _tryDecode(datagram);
+      if (decoded != null) {
+        freshest = decoded;
+      }
+    }
+
+    if (freshest != null) {
+      _lastReceived = DateTime.now();
+
+      // Update raw hands
+      _rawHands
+        ..clear()
+        ..addAll(freshest);
+
+      // Apply temporal smoothing
+      for (final entry in _rawHands.entries) {
+        final handId = entry.key;
+        final rawLandmarks = entry.value;
+        final existing = _smoothedHands[handId];
+
+        if (existing == null || existing.length != rawLandmarks.length) {
+          // First frame for this hand — snap directly, no smoothing
+          _smoothedHands[handId] = rawLandmarks;
+        } else {
+          // Blend: smoothed = smoothed + alpha * (raw - smoothed)
+          _smoothedHands[handId] = List.generate(rawLandmarks.length, (i) {
+            return existing[i].lerp(rawLandmarks[i], _smoothAlpha);
+          });
+        }
+      }
+
+      // Remove hands that are no longer tracked
+      _smoothedHands.removeWhere((id, _) => !_rawHands.containsKey(id));
+    }
+  }
+
+  /// Try to parse a datagram into a hand-ID → landmarks map.
+  /// Returns null on any parse error or unexpected format.
+  Map<int, List<Landmark>>? _tryDecode(Datagram datagram) {
     try {
       final jsonStr = utf8.decode(datagram.data);
       final decoded = json.decode(jsonStr);
 
       if (decoded is Map && decoded.containsKey('hands')) {
-        // New multi-hand format
-        _hands.clear();
+        final result = <int, List<Landmark>>{};
         final List<dynamic> handsJson = decoded['hands'];
         for (final handJson in handsJson) {
           final int handId = handJson['id'] as int;
           final List<dynamic> landmarksJson = handJson['landmarks'];
           if (landmarksJson.length == 21) {
-            _hands[handId] = landmarksJson.map((item) {
+            result[handId] = landmarksJson.map((item) {
               return Landmark(
                 x: (item['x'] as num).toDouble(),
                 y: (item['y'] as num).toDouble(),
@@ -65,22 +125,23 @@ class UdpService {
             }).toList();
           }
         }
-        _lastReceived = DateTime.now();
+        return result;
       } else if (decoded is List && decoded.length == 21) {
-        // Legacy single-hand format (backwards compatible)
-        _hands.clear();
-        _hands[0] = decoded.map((item) {
-          return Landmark(
-            x: (item['x'] as num).toDouble(),
-            y: (item['y'] as num).toDouble(),
-            z: (item['z'] as num).toDouble(),
-          );
-        }).toList();
-        _lastReceived = DateTime.now();
+        // Legacy single-hand format
+        return {
+          0: decoded.map((item) {
+            return Landmark(
+              x: (item['x'] as num).toDouble(),
+              y: (item['y'] as num).toDouble(),
+              z: (item['z'] as num).toDouble(),
+            );
+          }).toList(),
+        };
       }
     } catch (_) {
       // Silently ignore malformed packets
     }
+    return null;
   }
 
   void dispose() {

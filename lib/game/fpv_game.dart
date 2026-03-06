@@ -24,6 +24,9 @@ import 'components/projectile.dart';
 import 'components/floating_text.dart';
 import 'components/damage_flash.dart';
 import 'components/death_pop.dart';
+import 'components/combo_ring.dart';
+import 'components/impact_frame.dart';
+import 'components/texel_splat.dart';
 import '../systems/audio_manager.dart';
 
 class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, SecondaryTapCallbacks {
@@ -32,6 +35,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
   late DungeonBackground _background;
   late ScreenShake _screenShake;
   late DamageFlash _damageFlash;
+  late ComboRing _comboRing;
 
   // Active enemies
   final List<Enemy> _enemies = [];
@@ -186,6 +190,10 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     _damageFlash = DamageFlash();
     add(_damageFlash);
 
+    // Combo UI
+    _comboRing = ComboRing()..position = Vector2(size.x / 2, size.y * 0.8);
+    add(_comboRing);
+
     // CRT overlay (renders on top of everything)
     add(RetroOverlay());
 
@@ -278,6 +286,26 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     // --- Spell cooldown decay ---
     if (_spellCooldown > 0) _spellCooldown -= dt;
 
+    // --- Compute active combo glow color ---
+    Color? activeColor;
+    if (_spellEngine.currentCombo.isNotEmpty) {
+      final currentFirst = _spellEngine.currentCombo.first;
+      for (final spell in _spellEngine.knownSpells) {
+        if (spell.requiredGestures.first == currentFirst) {
+          activeColor = spell.effectColor;
+          break;
+        }
+      }
+    }
+    
+    // Update combo ring
+    if (_spellEngine.currentCombo.isNotEmpty && _spellCooldown <= 0) {
+      _comboRing.progress = _spellEngine.timeoutProgress;
+      _comboRing.ringColor = activeColor ?? Palette.fireGold;
+    } else {
+      _comboRing.progress = 0.0;
+    }
+
     // --- Hand tracking (supports 2 hands) ---
     final bool usingUdp = udpService != null && udpService!.isConnected;
 
@@ -293,6 +321,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
         continue;
       }
 
+      _hands[handId]?.activeGlowColor = activeColor;
       _hands[handId]?.updateLandmarks(landmarks, _mapper, dt: dt);
 
       // Update background parallax from primary hand
@@ -366,6 +395,13 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
             color: Palette.impactRed,
             fontSize: 24,
           ));
+          
+          // Massive blood splat at the bottom of the screen
+          add(TexelSplat(
+            position: Vector2(size.x / 2, size.y), 
+            baseColor: Palette.impactRed,
+          )..priority = 100);
+
           enemy.takeDamage(999);
         }
       }
@@ -404,6 +440,12 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       primaryColor: enemy.data.primaryColor,
       popScale: enemy.data.kind == EnemyKind.boss ? 2.0 : 1.0,
     ));
+
+    // Major Texel Splatting effect
+    add(TexelSplat(
+      position: enemy.position.clone(),
+      baseColor: enemy.data.primaryColor,
+    )..priority = 100);
 
     // Score with combo multiplier
     final now = _gameTime;
@@ -588,6 +630,11 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       return;
     }
     enemy.takeDamage(spell.damage);
+
+    // High priority anime impact frame on big hits
+    if (spell.type == SpellType.attack || spell.type == SpellType.ultimate) {
+      add(ImpactFrame()..priority = 100);
+    }
   }
 
   Enemy? _findNearestEnemy() {

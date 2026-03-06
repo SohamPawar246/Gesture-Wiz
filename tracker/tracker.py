@@ -6,8 +6,8 @@ Downloads the model automatically on first run.
 
 Supports up to 2 hands simultaneously.
 Sends:
-  - Landmarks as JSON: {"hands": [{"id": 0, "landmarks": [...]}]}
-  - Clean JPEG frames for Flutter video overlay
+  - Landmarks as JSON every frame: {"hands": [{"id": 0, "landmarks": [...]}]}
+  - Clean JPEG frames for Flutter video overlay (throttled to every 3rd frame)
 
 Usage:
     pip install -r requirements.txt
@@ -37,8 +37,13 @@ UDP_IP = "127.0.0.1"
 LANDMARK_PORT = 5005
 VIDEO_PORT = 5006
 CAMERA_INDEX = 0
-JPEG_QUALITY = 70
+JPEG_QUALITY = 65      # Slightly lower to reduce encode time
 MAX_HANDS = 2
+
+# Lower resolution = dramatically faster processing per frame
+CAMERA_WIDTH = 640
+CAMERA_HEIGHT = 480
+CAMERA_FPS = 60        # Request 60fps (webcam will cap at its max, usually 30–60)
 
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task"
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "hand_landmarker.task")
@@ -63,9 +68,9 @@ def main():
         base_options=base_options,
         running_mode=vision.RunningMode.VIDEO,
         num_hands=MAX_HANDS,
-        min_hand_detection_confidence=0.7,
-        min_hand_presence_confidence=0.7,
-        min_tracking_confidence=0.6,
+        min_hand_detection_confidence=0.65,   # Slightly relaxed for speed
+        min_hand_presence_confidence=0.65,
+        min_tracking_confidence=0.55,
     )
     landmarker = vision.HandLandmarker.create_from_options(options)
 
@@ -75,16 +80,23 @@ def main():
         print(f"ERROR: Could not open camera index {CAMERA_INDEX}")
         sys.exit(1)
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    # Lower resolution for faster processing — 640x480 is sufficient for hand tracking
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+    cap.set(cv2.CAP_PROP_FPS, CAMERA_FPS)   # Request high FPS from camera
 
     # --- UDP ---
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    actual_fps = cap.get(cv2.CAP_PROP_FPS)
+
     print(f"[Tracker] Using HandLandmarker (Tasks API) — best model")
+    print(f"[Tracker] Camera: {actual_w}x{actual_h} @ {actual_fps:.0f}fps")
     print(f"[Tracker] Max hands: {MAX_HANDS}")
-    print(f"[Tracker] Landmarks → {UDP_IP}:{LANDMARK_PORT}")
-    print(f"[Tracker] Video     → {UDP_IP}:{VIDEO_PORT}")
+    print(f"[Tracker] Landmarks → {UDP_IP}:{LANDMARK_PORT}  (every frame)")
+    print(f"[Tracker] Video     → {UDP_IP}:{VIDEO_PORT}  (every 3rd frame)")
     print(f"[Tracker] Press 'q' in the preview window to quit.")
 
     frame_count = 0
@@ -100,7 +112,7 @@ def main():
             frame_count += 1
             timestamp_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
             if timestamp_ms <= 0:
-                timestamp_ms = frame_count * 33  # Fallback: ~30fps
+                timestamp_ms = frame_count * 16   # Fallback: ~60fps target
 
             # Convert to MediaPipe Image
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -111,6 +123,9 @@ def main():
 
             preview = frame.copy()
 
+            # ----------------------------------------------------------------
+            # LANDMARK UDP SEND — every single frame, no skipping
+            # ----------------------------------------------------------------
             if result.hand_landmarks:
                 hands_data = []
 
@@ -118,9 +133,9 @@ def main():
                     landmarks = []
                     for lm in hand_landmarks:
                         landmarks.append({
-                            "x": round(lm.x, 6),
-                            "y": round(lm.y, 6),
-                            "z": round(lm.z, 6),
+                            "x": round(lm.x, 5),
+                            "y": round(lm.y, 5),
+                            "z": round(lm.z, 5),
                         })
 
                     hands_data.append({
@@ -128,8 +143,7 @@ def main():
                         "landmarks": landmarks,
                     })
 
-                    # Draw on preview using normalized landmarks
-                    # Convert to mp.solutions format for drawing
+                    # Draw on preview
                     from mediapipe.framework.formats import landmark_pb2
                     hand_proto = landmark_pb2.NormalizedLandmarkList()
                     for lm in hand_landmarks:
@@ -143,11 +157,14 @@ def main():
                 payload = json.dumps({"hands": hands_data}).encode("utf-8")
                 sock.sendto(payload, (UDP_IP, LANDMARK_PORT))
             else:
+                # Always send an empty hands packet so Dart knows tracking is lost
                 payload = json.dumps({"hands": []}).encode("utf-8")
                 sock.sendto(payload, (UDP_IP, LANDMARK_PORT))
 
-            # Video frame every 2nd frame
-            if frame_count % 2 == 0:
+            # ----------------------------------------------------------------
+            # VIDEO UDP SEND — throttled to every 3rd frame to save bandwidth
+            # ----------------------------------------------------------------
+            if frame_count % 3 == 0:
                 _, jpeg_buf = cv2.imencode(
                     '.jpg', frame,
                     [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
@@ -158,7 +175,8 @@ def main():
 
             cv2.imshow("FPV Magic - Hand Tracker", preview)
 
-            if cv2.waitKey(5) & 0xFF == ord("q"):
+            # waitKey(1) = minimum wait, no artificial 5ms sleep
+            if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
     finally:

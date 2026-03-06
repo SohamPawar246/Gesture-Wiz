@@ -18,8 +18,8 @@ class GestureStateMachine {
   final int cooldownAfterConfirm;
 
   GestureStateMachine({
-    this.debounceFrames = 12,   // ~200ms at 60fps — tight but not twitchy
-    this.cooldownAfterConfirm = 8, // ~133ms cooldown prevents double-triggers
+    this.debounceFrames = 3,       // ~50ms at 60fps — snappy without being too sensitive
+    this.cooldownAfterConfirm = 3, // ~50ms dead zone after fire to prevent double-trigger
   });
 
   GestureType processFrame(GestureType detectedThisFrame) {
