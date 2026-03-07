@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../systems/hand_tracking/coordinate_mapper.dart';
 import '../systems/hand_tracking/landmark_model.dart';
-import '../systems/hand_tracking/udp_service.dart';
+import '../systems/hand_tracking/tracking_service.dart';
 import '../systems/gesture/gesture_type.dart';
 import '../systems/gesture/rule_based_recognizer.dart';
 import '../systems/gesture/gesture_state_machine.dart';
-import '../systems/spell/spell_engine.dart';
+import '../systems/action_system.dart';
 import '../systems/wave_manager.dart';
 import '../models/spell.dart';
 import '../models/player_stats.dart';
@@ -24,7 +24,6 @@ import 'components/projectile.dart';
 import 'components/floating_text.dart';
 import 'components/damage_flash.dart';
 import 'components/death_pop.dart';
-import 'components/combo_ring.dart';
 import 'components/impact_frame.dart';
 import 'components/texel_splat.dart';
 import '../systems/audio_manager.dart';
@@ -35,7 +34,6 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
   late DungeonBackground _background;
   late ScreenShake _screenShake;
   late DamageFlash _damageFlash;
-  late ComboRing _comboRing;
 
   // Active enemies
   final List<Enemy> _enemies = [];
@@ -47,93 +45,25 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
   double _killStreakTimer = 0;
   static const double _comboWindow = 2.0;
 
-  // Shield active
+  // Shield state
   double _shieldTimer = 0;
-
-  // Global spell cooldown (prevent spam)
-  double _spellCooldown = 0;
-  static const double _spellCooldownDuration = 0.8; // 800ms between casts
+  bool _shieldActive = false;
 
   // Gesture Subsystem — per hand
   final RuleBasedRecognizer _gestureRecognizer = RuleBasedRecognizer();
-  final GestureStateMachine _stateMachine0 = GestureStateMachine(); // left/primary hand
-  final GestureStateMachine _stateMachine1 = GestureStateMachine(); // right/secondary hand
+  final GestureStateMachine _stateMachine0 = GestureStateMachine();
+  final GestureStateMachine _stateMachine1 = GestureStateMachine();
   final void Function(GestureType detectedGesture)? onGestureDetected;
-  final void Function(List<GestureType> combo, double timeoutProgress)? onComboChanged;
 
   // Game state callbacks
   final void Function()? onGameOver;
   final void Function(int wave)? onWaveChanged;
   final void Function()? onVictory;
 
-  // Spell Subsystem — 6 spells
-  final SpellEngine _spellEngine = SpellEngine(
-    knownSpells: const [
-      Spell(
-        name: 'Fireball',
-        requiredGestures: [GestureType.pinch, GestureType.point],
-        difficulty: 1,
-        manaCost: 10,
-        castWindow: Duration(seconds: 3),
-        effectColor: Colors.deepOrange,
-        type: SpellType.attack,
-        damage: 1.0,
-      ),
-      Spell(
-        name: 'Ice Shield',
-        requiredGestures: [GestureType.point, GestureType.vSign],
-        difficulty: 2,
-        manaCost: 20,
-        castWindow: Duration(seconds: 3),
-        effectColor: Colors.cyanAccent,
-        type: SpellType.defense,
-        damage: 0,
-      ),
-      Spell(
-        name: 'Healing Aura',
-        requiredGestures: [GestureType.vSign, GestureType.fist],
-        difficulty: 2,
-        manaCost: 15,
-        castWindow: Duration(seconds: 3),
-        effectColor: Colors.greenAccent,
-        type: SpellType.heal,
-        damage: 0,
-      ),
-      Spell(
-        name: 'Lightning Bolt',
-        requiredGestures: [GestureType.point, GestureType.point],
-        difficulty: 2,
-        manaCost: 15,
-        castWindow: Duration(seconds: 3),
-        effectColor: Color(0xFFFFFF44),
-        type: SpellType.attack,
-        damage: 1.5,
-      ),
-      Spell(
-        name: 'Earth Wall',
-        requiredGestures: [GestureType.fist, GestureType.fist],
-        difficulty: 2,
-        manaCost: 25,
-        castWindow: Duration(seconds: 3),
-        effectColor: Color(0xFF886633),
-        type: SpellType.defense,
-        damage: 0,
-      ),
-      Spell(
-        name: 'Meteor Storm',
-        requiredGestures: [GestureType.pinch, GestureType.fist, GestureType.point],
-        difficulty: 3,
-        manaCost: 50,
-        castWindow: Duration(seconds: 4),
-        effectColor: Color(0xFFFF4400),
-        type: SpellType.ultimate,
-        damage: 3.0,
-        radius: 999,
-      ),
-    ],
-  );
+  // Action System (replaces SpellEngine)
+  final ActionSystem _actionSystem = ActionSystem.theEye();
 
-  List<Spell> get knownSpells => _spellEngine.knownSpells;
+  List<GameAction> get knownActions => _actionSystem.actions;
 
   // Wave Manager
   late WaveManager _waveManager;
@@ -141,8 +71,8 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
   // Progression
   final PlayerStats playerStats;
 
-  // Hand Tracking
-  final UdpService? udpService;
+  // Hand Tracking (abstract — UdpService on desktop, WebTrackingService on web)
+  final TrackingService? trackingService;
 
   // Mouse Input
   Vector2 _mouseCursor = Vector2.zero();
@@ -155,12 +85,11 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
 
   FpvGame({
     this.onGestureDetected,
-    this.onComboChanged,
     this.onGameOver,
     this.onWaveChanged,
     this.onVictory,
     required this.playerStats,
-    this.udpService,
+    this.trackingService,
   });
 
   @override
@@ -186,15 +115,11 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     _screenShake = ScreenShake();
     add(_screenShake);
 
-    // Damage flash (renders above enemies, below CRT)
+    // Damage flash
     _damageFlash = DamageFlash();
     add(_damageFlash);
 
-    // Combo UI
-    _comboRing = ComboRing()..position = Vector2(size.x / 2, size.y * 0.8);
-    add(_comboRing);
-
-    // CRT overlay (renders on top of everything)
+    // CRT overlay
     add(RetroOverlay());
 
     // Audio Init
@@ -209,7 +134,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
         onWaveChanged?.call(wave);
         add(FloatingText(
           position: Vector2(size.x / 2, size.y / 2),
-          text: 'WAVE $wave',
+          text: 'CHAMBER $wave',
           color: Palette.fireGold,
           fontSize: 36,
           duration: 2.0,
@@ -219,7 +144,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
         AudioManager.playSfx('wave.wav', volume: 0.6);
         add(FloatingText(
           position: Vector2(size.x / 2, size.y / 2),
-          text: 'WAVE $wave CLEAR!',
+          text: 'CHAMBER $wave CLEAR',
           color: Palette.fireGold,
           fontSize: 28,
           duration: 2.0,
@@ -233,7 +158,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
         _screenShake.trigger(intensity: 20.0, decay: 3.0);
         add(FloatingText(
           position: Vector2(size.x / 2, size.y * 0.35),
-          text: 'BOSS: FLAME LORD',
+          text: 'THE REBEL APPROACHES',
           color: Palette.impactRed,
           fontSize: 32,
           duration: 3.0,
@@ -263,6 +188,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     _killStreak = 0;
     _killStreakTimer = 0;
     _shieldTimer = 0;
+    _shieldActive = false;
     _gameTime = 0;
     _gameRunning = true;
   }
@@ -283,40 +209,37 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       }
     }
 
-    // --- Spell cooldown decay ---
-    if (_spellCooldown > 0) _spellCooldown -= dt;
-
-    // --- Compute active combo glow color ---
+    // --- Compute active action glow color ---
     Color? activeColor;
-    if (_spellEngine.currentCombo.isNotEmpty) {
-      final currentFirst = _spellEngine.currentCombo.first;
-      for (final spell in _spellEngine.knownSpells) {
-        if (spell.requiredGestures.first == currentFirst) {
-          activeColor = spell.effectColor;
-          break;
-        }
-      }
-    }
-    
-    // Update combo ring
-    if (_spellEngine.currentCombo.isNotEmpty && _spellCooldown <= 0) {
-      _comboRing.progress = _spellEngine.timeoutProgress;
-      _comboRing.ringColor = activeColor ?? Palette.fireGold;
-    } else {
-      _comboRing.progress = 0.0;
-    }
+
+    // Reset shield state each frame — will be set if openPalm held
+    _shieldActive = false;
 
     // --- Hand tracking (supports 2 hands) ---
-    final bool usingUdp = udpService != null && udpService!.isConnected;
+    // Poll WebTrackingService if on web (it reads from JS each frame)
+    if (trackingService is dynamic && trackingService != null) {
+      try { (trackingService as dynamic).poll(); } catch (_) {}
+    }
+    final bool usingTracking = trackingService != null && trackingService!.isConnected;
+
+    // --- Face tracking for camera pan/parallax ---
+    if (usingTracking && trackingService!.facePosition != null) {
+      final facePos = trackingService!.facePosition!;
+      _background.parallaxX = facePos.x;
+      _background.parallaxY = facePos.y;
+    } else {
+      // Return to center if no face detected
+      _background.parallaxX += (0.5 - _background.parallaxX) * dt * 3.0;
+      _background.parallaxY += (0.5 - _background.parallaxY) * dt * 3.0;
+    }
 
     for (int handId = 0; handId < 2; handId++) {
       final List<Landmark> landmarks;
-      if (usingUdp && udpService!.getHandLandmarks(handId) != null) {
-        landmarks = udpService!.getHandLandmarks(handId)!;
-      } else if (handId == 0 && !usingUdp) {
+      if (usingTracking && trackingService!.getHandLandmarks(handId) != null) {
+        landmarks = trackingService!.getHandLandmarks(handId)!;
+      } else if (handId == 0 && !usingTracking) {
         landmarks = _generateMouseDrivenLandmarks();
       } else {
-        // No data for this hand — hide it
         _hands[handId]?.updateLandmarks([], _mapper, dt: dt);
         continue;
       }
@@ -324,28 +247,29 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       _hands[handId]?.activeGlowColor = activeColor;
       _hands[handId]?.updateLandmarks(landmarks, _mapper, dt: dt);
 
-      // Update background parallax from primary hand
-      if (handId == 0 && landmarks.isNotEmpty) {
-        _background.parallaxX = landmarks[0].x;
-        _background.parallaxY = landmarks[0].y;
-      }
-
       // --- Gesture recognition per hand ---
       final rawGesture = _gestureRecognizer.recognize(landmarks);
       final stateMachine = handId == 0 ? _stateMachine0 : _stateMachine1;
-      final stableGesture = stateMachine.processFrame(rawGesture);
+      final stableGesture = stateMachine.processFrame(
+        rawGesture,
+        landmarks: landmarks,
+        dt: dt,
+      );
 
-      if (stableGesture != GestureType.none && _spellCooldown <= 0) {
-        final matchedSpell = _spellEngine.processGesture(stableGesture);
-        if (matchedSpell != null) {
-          if (playerStats.canCast(matchedSpell.manaCost)) {
-            final Vector2 spawnPos = landmarks.isNotEmpty
-              ? _mapper.mapLandmarkToScreen(landmarks[0])
-              : Vector2(size.x / 2, size.y / 2);
-            _castSpell(matchedSpell, spawnPos);
-          }
+      if (stableGesture != GestureType.none) {
+        final handPos = landmarks.isNotEmpty
+          ? _mapper.mapLandmarkToScreen(landmarks[0])
+          : Vector2(size.x / 2, size.y / 2);
+
+        final result = _actionSystem.processGesture(stableGesture, handPos);
+        if (result != null) {
+          _executeAction(result.action, handPos, dt);
+          activeColor = result.action.effectColor;
         }
       }
+
+      // Update hand glow with active action color
+      _hands[handId]?.activeGlowColor = activeColor;
 
       // Gesture callback (from primary hand only)
       if (handId == 0 && onGestureDetected != null) {
@@ -353,18 +277,16 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       }
     }
 
-    _spellEngine.update(dt);
+    _actionSystem.update(dt);
     playerStats.regenerateMana(dt);
-
-    if (onComboChanged != null) {
-      onComboChanged!(_spellEngine.currentCombo, _spellEngine.timeoutProgress);
-    }
 
     // --- Wave manager ---
     _waveManager.update(dt);
 
     // --- Shield timer ---
-    if (_shieldTimer > 0) _shieldTimer -= dt;
+    if (_shieldTimer > 0 && !_shieldActive) {
+      _shieldTimer -= dt;
+    }
 
     // --- Enemy collision check ---
     final enemiesToRemove = <Enemy>[];
@@ -375,12 +297,12 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       }
 
       if (enemy.reachedPlayer) {
-        if (_shieldTimer > 0) {
+        if (_shieldTimer > 0 || _shieldActive) {
           AudioManager.playSfx('shield.wav', volume: 0.5);
           enemy.takeDamage(999);
           add(FloatingText(
             position: enemy.position.clone(),
-            text: 'BLOCKED!',
+            text: 'BLOCKED',
             color: Colors.cyanAccent,
             fontSize: 18,
           ));
@@ -388,7 +310,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
           AudioManager.playSfx('hit.wav', volume: 0.7);
           playerStats.takeDamage(enemy.data.damage);
           _screenShake.trigger(intensity: 15.0);
-          _damageFlash.trigger(); // RED FLASH!
+          _damageFlash.trigger();
           add(FloatingText(
             position: Vector2(size.x / 2, size.y * 0.7),
             text: '-${enemy.data.damage.toInt()} HP',
@@ -396,7 +318,6 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
             fontSize: 24,
           ));
           
-          // Massive blood splat at the bottom of the screen
           add(TexelSplat(
             position: Vector2(size.x / 2, size.y), 
             baseColor: Palette.impactRed,
@@ -423,6 +344,147 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     }
   }
 
+  /// Execute a game action based on its type
+  void _executeAction(GameAction action, Vector2 position, double dt) {
+    switch (action.type) {
+      case ActionType.attack:
+        _executeAttack(action, position);
+        break;
+      case ActionType.push:
+        _executeForcePush(action, position);
+        break;
+      case ActionType.shield:
+        _executeShield(action, position, dt);
+        break;
+      case ActionType.grab:
+        _executeGrab(action, position);
+        break;
+      case ActionType.ultimate:
+        _executeUltimate(action, position);
+        break;
+    }
+  }
+
+  void _executeAttack(GameAction action, Vector2 position) {
+    if (!playerStats.canCast(action.manaCost)) return;
+    playerStats.consumeMana(action.manaCost);
+
+    AudioManager.playSfx('fireball.wav', volume: 0.5);
+    
+    final target = _findNearestEnemy();
+    add(Projectile(
+      startPosition: position,
+      action: action,
+      target: target,
+      onHit: (enemy, a) => _onProjectileHit(enemy, a),
+    ));
+
+    add(SpellEffect(
+      position: position.clone(),
+      effectColor: action.effectColor,
+      spellName: action.name,
+    ));
+
+    _screenShake.trigger(intensity: 6.0);
+    playerStats.addXp(5);
+  }
+
+  void _executeForcePush(GameAction action, Vector2 position) {
+    if (!playerStats.canCast(action.manaCost)) return;
+    playerStats.consumeMana(action.manaCost);
+
+    AudioManager.playSfx('explode.wav', volume: 0.5);
+
+    add(Projectile(
+      startPosition: position,
+      action: action,
+    ));
+
+    // Damage enemies near the fist position
+    for (final enemy in _enemies) {
+      if (!enemy.isDead) {
+        final dist = (enemy.position - position).length;
+        if (dist < action.radius) {
+          enemy.takeDamage(action.damage);
+          add(FloatingText(
+            position: enemy.position.clone(),
+            text: 'PUSHED',
+            color: action.effectColor,
+            fontSize: 16,
+          ));
+        }
+      }
+    }
+
+    add(SpellEffect(
+      position: position.clone(),
+      effectColor: action.effectColor,
+      spellName: action.name,
+    ));
+
+    _screenShake.trigger(intensity: 12.0);
+    playerStats.addXp(8);
+  }
+
+  void _executeShield(GameAction action, Vector2 position, double dt) {
+    // Sustained: drain mana per second while held
+    final drain = action.manaCost * dt;
+    if (!playerStats.canCast(drain)) return;
+    playerStats.consumeMana(drain);
+
+    _shieldActive = true;
+    _shieldTimer = 0.3; // Lingers briefly after release
+  }
+
+  void _executeGrab(GameAction action, Vector2 position) {
+    // Grab logic — will be expanded in Phase 2 with interactables
+    // For now, check if pinch position is near an enemy (grab-throw preview)
+    for (final enemy in _enemies) {
+      if (!enemy.isDead) {
+        final dist = (enemy.position - position).length;
+        if (dist < 80) {
+          // "Grabbed" enemy — deal minor damage
+          enemy.takeDamage(0.2);
+          add(FloatingText(
+            position: enemy.position.clone(),
+            text: 'GRIP',
+            color: action.effectColor,
+            fontSize: 14,
+          ));
+          break; // Only grab one
+        }
+      }
+    }
+  }
+
+  void _executeUltimate(GameAction action, Vector2 position) {
+    if (!playerStats.canCast(action.manaCost)) return;
+    playerStats.consumeMana(action.manaCost);
+
+    AudioManager.playSfx('explode.wav', volume: 0.8);
+
+    add(Projectile(
+      startPosition: Vector2(size.x / 2, size.y / 2),
+      action: action,
+    ));
+
+    for (final enemy in List.of(_enemies)) {
+      if (!enemy.isDead) {
+        enemy.takeDamage(action.damage);
+      }
+    }
+
+    add(FloatingText(
+      position: Vector2(size.x / 2, size.y * 0.3),
+      text: 'OVERWATCH PULSE',
+      color: action.effectColor,
+      fontSize: 30,
+    ));
+    add(ImpactFrame()..priority = 100);
+    _screenShake.trigger(intensity: 20.0);
+    playerStats.addXp(20);
+  }
+
   void _spawnEnemy(EnemyData data) {
     final enemy = Enemy(data: data);
     _enemies.add(enemy);
@@ -433,7 +495,6 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     _enemies.remove(enemy);
     enemy.removeFromParent();
 
-    // Death pop particles + sound
     AudioManager.playSfx('pop.wav', volume: 0.4);
     add(DeathPop(
       position: enemy.position.clone(),
@@ -441,7 +502,6 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       popScale: enemy.data.kind == EnemyKind.boss ? 2.0 : 1.0,
     ));
 
-    // Major Texel Splatting effect
     add(TexelSplat(
       position: enemy.position.clone(),
       baseColor: enemy.data.primaryColor,
@@ -456,7 +516,6 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     }
     _lastKillTime = now;
 
-    // Kill streak
     _killStreak++;
     _killStreakTimer = 2.0;
 
@@ -465,7 +524,6 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     playerStats.addKill();
     playerStats.addXp(10 * _comboMultiplier);
 
-    // Floating score text
     add(FloatingText(
       position: enemy.position.clone(),
       text: '+$points',
@@ -473,20 +531,16 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       fontSize: 18,
     ));
 
-    // Combo text
     if (_comboMultiplier > 1) {
       add(FloatingText(
         position: enemy.position.clone() + Vector2(0, -30),
-        text: 'x$_comboMultiplier COMBO!',
+        text: 'x$_comboMultiplier',
         color: Palette.fireBright,
         fontSize: 22,
       ));
     }
 
-    // Kill streak announcements!
     _announceKillStreak();
-
-    // Notify wave manager
     _waveManager.onEnemyKilled();
   }
 
@@ -497,27 +551,27 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
 
     switch (_killStreak) {
       case 2:
-        text = 'DOUBLE KILL!';
+        text = 'DOUBLE KILL';
         color = Palette.fireBright;
         shakeIntensity = 8;
         break;
       case 3:
-        text = 'TRIPLE KILL!';
+        text = 'TRIPLE KILL';
         color = const Color(0xFFFF8800);
         shakeIntensity = 12;
         break;
       case 5:
-        text = 'KILLING SPREE!';
+        text = 'KILLING SPREE';
         color = Palette.impactRed;
         shakeIntensity = 16;
         break;
       case 8:
-        text = 'UNSTOPPABLE!';
+        text = 'UNSTOPPABLE';
         color = const Color(0xFFFF0044);
         shakeIntensity = 20;
         break;
       case 10:
-        text = 'GODLIKE!';
+        text = 'ALL-SEEING';
         color = const Color(0xFFFFFF00);
         shakeIntensity = 25;
         break;
@@ -535,104 +589,10 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     }
   }
 
-  void _castSpell(Spell spell, Vector2 position) {
-    debugPrint("CASTING: ${spell.name}");
-    _spellCooldown = _spellCooldownDuration; // Start cooldown
-    
-    switch (spell.type) {
-      case SpellType.attack:
-        AudioManager.playSfx('fireball.wav', volume: 0.5);
-        break;
-      case SpellType.defense:
-        AudioManager.playSfx('shield.wav', volume: 0.6);
-        break;
-      case SpellType.heal:
-        AudioManager.playSfx('heal.wav', volume: 0.6);
-        break;
-      case SpellType.ultimate:
-        AudioManager.playSfx('explode.wav', volume: 0.8);
-        break;
-    }
+  void _onProjectileHit(Enemy enemy, GameAction action) {
+    enemy.takeDamage(action.damage);
 
-    playerStats.consumeMana(spell.manaCost);
-    playerStats.addXp(10);
-
-    add(SpellEffect(
-      position: position.clone(),
-      effectColor: spell.effectColor,
-      spellName: spell.name,
-    ));
-
-    _screenShake.trigger(intensity: 8.0 + spell.manaCost * 0.2);
-
-    switch (spell.type) {
-      case SpellType.attack:
-        final target = _findNearestEnemy();
-        add(Projectile(
-          startPosition: position,
-          spell: spell,
-          target: target,
-          onHit: (enemy, s) => _onProjectileHit(enemy, s),
-        ));
-        break;
-
-      case SpellType.defense:
-        _shieldTimer = 3.0;
-        add(Projectile(startPosition: position, spell: spell));
-        add(FloatingText(
-          position: position + Vector2(0, -50),
-          text: 'SHIELD UP!',
-          color: Colors.cyanAccent,
-          fontSize: 20,
-        ));
-        break;
-
-      case SpellType.heal:
-        final healAmount = 25.0 + playerStats.level * 5;
-        playerStats.heal(healAmount);
-        add(Projectile(startPosition: position, spell: spell));
-        add(FloatingText(
-          position: position + Vector2(0, -50),
-          text: '+${healAmount.toInt()} HP',
-          color: Colors.greenAccent,
-          fontSize: 20,
-        ));
-        break;
-
-      case SpellType.ultimate:
-        add(Projectile(
-          startPosition: Vector2(size.x / 2, size.y / 2),
-          spell: spell,
-        ));
-        for (final enemy in List.of(_enemies)) {
-          if (!enemy.isDead) {
-            enemy.takeDamage(spell.damage);
-          }
-        }
-        add(FloatingText(
-          position: Vector2(size.x / 2, size.y * 0.3),
-          text: 'METEOR STORM!',
-          color: Palette.impactRed,
-          fontSize: 30,
-        ));
-        break;
-    }
-  }
-
-  void _onProjectileHit(Enemy enemy, Spell spell) {
-    if (enemy.data.fireImmune && spell.effectColor == Colors.deepOrange) {
-      add(FloatingText(
-        position: enemy.position.clone(),
-        text: 'IMMUNE!',
-        color: Palette.uiGrey,
-        fontSize: 16,
-      ));
-      return;
-    }
-    enemy.takeDamage(spell.damage);
-
-    // High priority anime impact frame on big hits
-    if (spell.type == SpellType.attack || spell.type == SpellType.ultimate) {
+    if (action.type == ActionType.attack || action.type == ActionType.ultimate) {
       add(ImpactFrame()..priority = 100);
     }
   }

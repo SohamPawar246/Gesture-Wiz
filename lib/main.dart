@@ -1,12 +1,15 @@
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'ui/hud.dart';
 import 'ui/game_over_screen.dart';
 import 'ui/tutorial_screen.dart';
 import 'game/fpv_game.dart';
 import 'game/palette.dart';
-import 'package:fpv_magic/systems/hand_tracking/udp_service.dart';
+import 'package:fpv_magic/systems/hand_tracking/tracking_service.dart';
+import 'package:fpv_magic/systems/hand_tracking/tracking_factory.dart'
+    if (dart.library.js_interop) 'package:fpv_magic/systems/hand_tracking/tracking_factory_web.dart';
 import 'package:fpv_magic/systems/gesture/gesture_type.dart';
 import 'package:fpv_magic/models/player_stats.dart';
 import 'package:fpv_magic/systems/save_system.dart';
@@ -22,7 +25,7 @@ class FpvMagicApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FPV Magic Spellcasting',
+      title: 'THE EYE — Big Brother',
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: Palette.bgDeep,
       ),
@@ -44,14 +47,12 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   late final PlayerStats playerStats;
-  late final UdpService udpService;
+  late final TrackingService trackingService;
   FpvGame? game;
   
   bool statsLoaded = false;
   GameState gameState = GameState.tutorial;
   GestureType activeGesture = GestureType.none;
-  List<GestureType> currentCombo = [];
-  double timeoutProgress = 0.0;
 
   @override
   void initState() {
@@ -60,14 +61,13 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Future<void> _initGameSystems() async {
-    // 1. Load Player Progress
     final saveSystem = SaveSystem();
     playerStats = PlayerStats(saveSystem: saveSystem);
     await playerStats.load();
 
-    // 2. Start UDP Listener for hand tracking
-    udpService = UdpService();
-    await udpService.start();
+    // Conditional: Web uses MediaPipe JS bridge, Desktop uses UDP
+    trackingService = createTrackingService();
+    await trackingService.start();
 
     if (mounted) setState(() => statsLoaded = true);
   }
@@ -80,16 +80,6 @@ class _GameScreenState extends State<GameScreen> {
             if (mounted) setState(() => activeGesture = gesture);
           });
         }
-      },
-      onComboChanged: (combo, progress) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              currentCombo = combo;
-              timeoutProgress = progress;
-            });
-          }
-        });
       },
       onGameOver: () {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -105,7 +95,7 @@ class _GameScreenState extends State<GameScreen> {
         // Wave changed — HUD will update via playerStats listener
       },
       playerStats: playerStats,
-      udpService: udpService,
+      trackingService: trackingService,
     );
 
     setState(() => gameState = GameState.playing);
@@ -118,7 +108,7 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   void dispose() {
-    udpService.dispose();
+    trackingService.dispose();
     super.dispose();
   }
 
@@ -141,7 +131,7 @@ class _GameScreenState extends State<GameScreen> {
     // Game + HUD + optional overlay
     return Stack(
       children: [
-        // 1. Bottom Layer: Dark teal dungeon background
+        // 1. Background gradient
         Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -156,19 +146,16 @@ class _GameScreenState extends State<GameScreen> {
           ),
         ),
         
-        // 2. Middle Layer: The Flame Game
+        // 2. The Flame Game
         if (game != null) GameWidget(game: game!),
         
-        // 3. Top Layer: The Flutter UI Overlay (HUD)
+        // 3. Flutter UI Overlay (HUD)
         ListenableBuilder(
           listenable: playerStats,
           builder: (context, _) {
             return HUD(
               activeGesture: activeGesture,
-              currentCombo: currentCombo,
-              timeoutProgress: timeoutProgress,
               playerStats: playerStats,
-              knownSpells: game?.knownSpells ?? [],
             );
           }
         ),

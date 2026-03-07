@@ -1,26 +1,53 @@
 import 'package:flutter/material.dart';
 
-import 'grimoire_screen.dart';
 import '../systems/gesture/gesture_type.dart';
 import '../models/player_stats.dart';
-import '../models/spell.dart';
 import '../game/palette.dart';
 
 class HUD extends StatelessWidget {
   final GestureType activeGesture;
-  final List<GestureType> currentCombo;
-  final double timeoutProgress;
   final PlayerStats playerStats;
-  final List<Spell> knownSpells;
 
   const HUD({
     super.key,
     required this.activeGesture,
-    required this.currentCombo,
-    required this.timeoutProgress,
     required this.playerStats,
-    required this.knownSpells,
   });
+
+  /// Maps gesture to its action name for display
+  String _gestureActionName(GestureType gesture) {
+    switch (gesture) {
+      case GestureType.none:
+        return 'SCANNING';
+      case GestureType.point:
+        return 'FIRE BOLT';
+      case GestureType.fist:
+        return 'FORCE PUSH';
+      case GestureType.openPalm:
+        return 'WARD SHIELD';
+      case GestureType.pinch:
+        return 'GRAB';
+      case GestureType.vSign:
+        return 'OVERWATCH';
+    }
+  }
+
+  Color _gestureColor(GestureType gesture) {
+    switch (gesture) {
+      case GestureType.none:
+        return Palette.uiGrey;
+      case GestureType.point:
+        return const Color(0xFFFF6622);
+      case GestureType.fist:
+        return const Color(0xFF8844FF);
+      case GestureType.openPalm:
+        return const Color(0xFF44DDFF);
+      case GestureType.pinch:
+        return const Color(0xFF88FF44);
+      case GestureType.vSign:
+        return const Color(0xFFFFFF44);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,35 +64,33 @@ class HUD extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildStatsBox(),
-                  _buildTopRight(context),
+                  _buildTopRight(),
                 ],
               ),
               
               const Spacer(),
               
-              // Combo Tracker
-              if (currentCombo.isNotEmpty) _buildComboTracker(),
-              
-              const Spacer(),
-              
-              // Bottom Bar — Active Gesture indicator
+              // Bottom — Active action indicator
               Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                   decoration: BoxDecoration(
                     color: Palette.uiDarkPanel,
-                    border: Border.all(color: Palette.fireMid.withValues(alpha: 0.4), width: 1.5),
+                    border: Border.all(
+                      color: _gestureColor(activeGesture).withValues(alpha: 0.6), 
+                      width: 1.5,
+                    ),
                   ),
                   child: Text(
-                    activeGesture.displayName.toUpperCase(),
-                    style: const TextStyle(
-                      color: Palette.fireGold,
-                      fontSize: 22,
+                    _gestureActionName(activeGesture),
+                    style: TextStyle(
+                      color: _gestureColor(activeGesture),
+                      fontSize: 20,
                       fontWeight: FontWeight.w900,
                       fontFamily: 'monospace',
                       letterSpacing: 4.0,
                       shadows: [
-                        Shadow(blurRadius: 8, color: Palette.fireDeep),
+                        Shadow(blurRadius: 10, color: _gestureColor(activeGesture).withValues(alpha: 0.5)),
                       ],
                     ),
                   ),
@@ -78,11 +103,11 @@ class HUD extends StatelessWidget {
     );
   }
 
-  Widget _buildTopRight(BuildContext context) {
+  Widget _buildTopRight() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Wave counter
+        // Chamber counter
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
@@ -90,7 +115,7 @@ class HUD extends StatelessWidget {
             border: Border.all(color: Palette.fireMid.withValues(alpha: 0.4), width: 1.5),
           ),
           child: Text(
-            'WAVE ${playerStats.currentWave}/10',
+            'CHAMBER ${playerStats.currentWave}/10',
             style: const TextStyle(
               color: Palette.fireGold,
               fontWeight: FontWeight.w900,
@@ -119,74 +144,7 @@ class HUD extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 6),
-        // Grimoire button
-        _buildGrimoireButton(context),
       ],
-    );
-  }
-
-  Widget _buildGrimoireButton(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => GrimoireScreen(knownSpells: knownSpells)),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Palette.uiDarkPanel,
-          border: Border.all(color: Palette.fireMid.withValues(alpha: 0.4), width: 1.5),
-        ),
-        child: const Icon(Icons.menu_book, size: 28, color: Palette.fireGold),
-      ),
-    );
-  }
-
-  Widget _buildComboTracker() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: currentCombo.map((g) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Palette.fireDeep.withValues(alpha: 0.6),
-                    border: Border.all(color: Palette.fireGold.withValues(alpha: 0.5)),
-                  ),
-                  child: Text(
-                    g.displayName.toUpperCase(),
-                    style: const TextStyle(
-                      color: Palette.fireGold,
-                      fontWeight: FontWeight.w900,
-                      fontFamily: 'monospace',
-                      fontSize: 13,
-                      letterSpacing: 2.0,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: 180,
-            child: LinearProgressIndicator(
-              value: 1.0 - timeoutProgress,
-              color: Palette.fireGold,
-              backgroundColor: Palette.bgMid.withValues(alpha: 0.4),
-              minHeight: 3,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -223,7 +181,6 @@ class HUD extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          // XP bar
           _buildBar(
             value: playerStats.currentXp / playerStats.maxXp,
             color: Palette.uiXp,

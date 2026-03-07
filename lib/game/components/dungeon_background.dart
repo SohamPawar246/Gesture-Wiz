@@ -50,9 +50,10 @@ class DungeonBackground extends PositionComponent with HasGameReference {
     final h = game.size.y;
     if (w <= 0 || h <= 0) return;
 
-    // Parallax offset (subtle, ±20px based on hand position)
-    final px = (parallaxX - 0.5) * 40.0;
-    final py = (parallaxY - 0.5) * 20.0;
+    // Parallax offset (Face tracking driven)
+    // Amplified to give a pronounced "camera looking around" effect
+    final px = (parallaxX - 0.5) * 200.0;
+    final py = (parallaxY - 0.5) * 100.0;
 
     // ==========================================================
     // 1. SKY / CEILING GRADIENT

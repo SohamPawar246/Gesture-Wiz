@@ -4,13 +4,13 @@ import '../hand_tracking/landmark_model.dart';
 import 'gesture_recognizer.dart';
 import 'gesture_type.dart';
 
-/// Tightened gesture recognition with balanced thresholds.
+/// Gesture recognition with tuned thresholds for THE EYE's direct-action system.
 ///
-/// Philosophy:
-///   - Use BOTH the ratio method AND the straightness check, but with slightly
-///     relaxed thresholds to tolerate natural camera angle variation.
-///   - Temporal smoothing in UdpService handles jitter; this recognizer handles shape.
-///   - Each gesture has explicit priority ordering to prevent ambiguous class bleed.
+/// Key design principles:
+///   - Pinch must NOT bleed from fist: require other fingers to be partially open
+///   - Fist requires ALL 4 fingers curled AND tips close to palm
+///   - OpenPalm is the default relaxed state — easy to enter and sustain
+///   - Point and VSign have strict shape requirements to avoid false triggers
 class RuleBasedRecognizer implements GestureRecognizer {
   @override
   GestureType recognize(List<Landmark> landmarks) {
@@ -49,26 +49,19 @@ class RuleBasedRecognizer implements GestureRecognizer {
 
     // ====================================================================
     // FINGER EXTENSION DETECTION
-    // Using two independent checks and combining with weighted confidence:
-    //   Method 1 (ratio): tip-to-wrist extending beyond PIP-to-wrist
-    //   Method 2 (straightness): tip farther from MCP than DIP is
-    // Thresholds slightly relaxed (0.13 open, 0.10 curl) vs the old 0.15/0.10
-    // to compensate for camera angle changes causing false negatives.
     // ====================================================================
     final double indexRatio  = (_distance(indexTip, wrist)  - _distance(indexPip,  wrist)) / palmSize;
     final double middleRatio = (_distance(middleTip, wrist) - _distance(middlePip, wrist)) / palmSize;
     final double ringRatio   = (_distance(ringTip, wrist)   - _distance(ringPip,   wrist)) / palmSize;
     final double pinkyRatio  = (_distance(pinkyTip, wrist)  - _distance(pinkyPip,  wrist)) / palmSize;
 
-    // 1.05x multiplier (was 1.1x) — less sensitive to minor DIP occlusion
+    // Straightness check (1.05x tolerance for camera angle variation)
     final bool indexStraight  = _distance(indexTip,  indexMcp)  > _distance(indexDip,  indexMcp)  * 1.05;
     final bool middleStraight = _distance(middleTip, middleMcp) > _distance(middleDip, middleMcp) * 1.05;
     final bool ringStraight   = _distance(ringTip,   ringMcp)   > _distance(ringDip,   ringMcp)   * 1.05;
     final bool pinkyStraight  = _distance(pinkyTip,  pinkyMcp)  > _distance(pinkyDip,  pinkyMcp)  * 1.05;
 
-    // Open: ratio above 0.13 (was 0.15) AND straightness agrees
     const double openThreshold = 0.13;
-    // Curl: ratio below 0.10 OR not straight — either is sufficient
     const double curlThreshold = 0.10;
 
     final bool isIndexOpen   = indexRatio  > openThreshold && indexStraight;
@@ -85,24 +78,33 @@ class RuleBasedRecognizer implements GestureRecognizer {
     final int curledCount = [isIndexCurled, isMiddleCurled, isRingCurled, isPinkyCurled].where((f) => f).length;
 
     // ====================================================================
-    // GESTURE CLASSIFICATION — ordered from most specific to most general
+    // GESTURE CLASSIFICATION — strict priority ordering
     // ====================================================================
 
-    // --- PINCH: Thumb very close to index or middle tip ---
-    // Guard: only if at most 2 other fingers are curled (avoid fist bleed)
+    // --- OPEN PALM (highest priority — it's the default/resting state) ---
+    // Must have all 4 fingers clearly extended. Check FIRST so it takes
+    // priority over partial matches.
+    if (openCount >= 4) {
+      return GestureType.openPalm;
+    }
+
+    // --- PINCH: Thumb + Index very close, BUT other fingers NOT all curled ---
+    // This is the key fix: if curledCount >= 3 AND thumb-index are close,
+    // it's probably a fist, not a pinch. Real pinch = thumb touches index
+    // while middle/ring/pinky are relaxed (not tightly curled).
     final double thumbIndexDist  = _distance(thumbTip, indexTip);
     final double thumbMiddleDist = _distance(thumbTip, middleTip);
 
-    if (thumbIndexDist < palmSize * 0.22 || thumbMiddleDist < palmSize * 0.27) {
-      // Must NOT be a full fist (curledCount < 3 means at least index or middle is partially free)
-      if (curledCount < 3) {
+    if (thumbIndexDist < palmSize * 0.18 || thumbMiddleDist < palmSize * 0.22) {
+      // Anti-fist guard: at least 2 of (middle, ring, pinky) should NOT be curled
+      final int othersCurled = [isMiddleCurled, isRingCurled, isPinkyCurled].where((f) => f).length;
+      if (othersCurled <= 1) {
         return GestureType.pinch;
       }
     }
 
-    // --- FIST: ALL 4 fingers curled tight ---
+    // --- FIST: ALL 4 fingers curled ---
     if (curledCount >= 4) {
-      // Primary check: average tip distance close to palm
       final double avgTipDist = (
         _distance(indexTip,  wrist) +
         _distance(middleTip, wrist) +
@@ -114,34 +116,28 @@ class RuleBasedRecognizer implements GestureRecognizer {
         return GestureType.fist;
       }
 
-      // Secondary fallback: if all 4 ratios are negative (tips below PIP level),
-      // it's definitively a strong fist even if the wrist estimate drifts
+      // Fallback: all ratios negative = strong fist
       if (indexRatio < 0 && middleRatio < 0 && ringRatio < 0 && pinkyRatio < 0) {
         return GestureType.fist;
       }
     }
 
-    // --- POINT: ONLY index extended, middle/ring/pinky curled ---
+    // --- POINT: ONLY index extended ---
     if (isIndexOpen && isMiddleCurled && isRingCurled && isPinkyCurled) {
-      if (_distance(indexTip, wrist) > palmSize * 1.25) { // Slightly relaxed from 1.3
+      if (_distance(indexTip, wrist) > palmSize * 1.2) {
         return GestureType.point;
       }
     }
 
-    // --- V-SIGN: Index + Middle extended, Ring + Pinky curled, fingers spread ---
+    // --- V-SIGN: Index + Middle extended, Ring + Pinky curled ---
     if (isIndexOpen && isMiddleOpen && isRingCurled && isPinkyCurled) {
       final double spread = _distance(indexTip, middleTip);
-      if (spread > palmSize * 0.20) { // Relaxed from 0.25 — allows closer V signs
+      if (spread > palmSize * 0.18) {
         return GestureType.vSign;
       }
     }
 
-    // --- OPEN PALM: 4 fingers extended ---
-    if (openCount >= 4) {
-      return GestureType.openPalm;
-    }
-
-    // Ambiguous state — return none (don't guess)
+    // Ambiguous — return none (don't guess)
     return GestureType.none;
   }
 

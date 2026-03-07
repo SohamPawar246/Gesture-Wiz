@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flame/components.dart';
 
 import '../hand_tracking/landmark_model.dart';
+import 'tracking_service.dart';
 
 /// Listens for UDP datagrams from the Python MediaPipe tracker
 /// and decodes them into hand landmark data.
@@ -15,7 +17,18 @@ import '../hand_tracking/landmark_model.dart';
 /// Supports both the new multi-hand format:
 ///   {"hands": [{"id": 0, "landmarks": [...]}, {"id": 1, "landmarks": [...]}]}
 /// and the legacy single-hand format (array of 21 landmarks).
-class UdpService {
+///
+/// Also handles optional face tracking data for camera panning:
+///   {"hands": [...], "face": {"x": 0.5, "y": 0.5}}
+
+class TrackerData {
+  final Map<int, List<Landmark>> hands;
+  final Vector2? face;
+
+  TrackerData({required this.hands, this.face});
+}
+
+class UdpService implements TrackingService {
   static const int _port = 5005;
 
   /// Smoothing factor: 0.0 = no movement (frozen), 1.0 = raw (no smoothing).
@@ -31,6 +44,9 @@ class UdpService {
   /// Smoothed hands — used by the rest of the game for rendering + recognition
   final Map<int, List<Landmark>> _smoothedHands = {};
 
+  Vector2? _rawFace;
+  Vector2? _smoothedFace;
+
   DateTime _lastReceived = DateTime(2000);
 
   /// Get smoothed landmarks for a specific hand (0 or 1)
@@ -38,6 +54,9 @@ class UdpService {
 
   /// Convenience: get the first (primary) hand
   List<Landmark>? get latestLandmarks => _smoothedHands[0];
+
+  /// Get smoothed face coordinate (normalized 0-1)
+  Vector2? get facePosition => _smoothedFace;
 
   /// Number of currently tracked hands
   int get handCount => _smoothedHands.length;
@@ -60,7 +79,7 @@ class UdpService {
   /// not a packet that has been sitting in the OS buffer.
   void _drainAndProcess() {
     // First pass: read everything, keep only the last valid decode per hand.
-    Map<int, List<Landmark>>? freshest;
+    TrackerData? freshest;
 
     while (true) {
       final datagram = _socket?.receive();
@@ -78,9 +97,9 @@ class UdpService {
       // Update raw hands
       _rawHands
         ..clear()
-        ..addAll(freshest);
+        ..addAll(freshest.hands);
 
-      // Apply temporal smoothing
+      // Apply temporal smoothing to hands
       for (final entry in _rawHands.entries) {
         final handId = entry.key;
         final rawLandmarks = entry.value;
@@ -99,12 +118,24 @@ class UdpService {
 
       // Remove hands that are no longer tracked
       _smoothedHands.removeWhere((id, _) => !_rawHands.containsKey(id));
+
+      // Handle Face Tracking data
+      _rawFace = freshest.face;
+      if (_rawFace != null) {
+        if (_smoothedFace == null) {
+          _smoothedFace = _rawFace!.clone();
+        } else {
+          _smoothedFace!.lerp(_rawFace!, _smoothAlpha);
+        }
+      } else {
+        _smoothedFace = null; // Face lost
+      }
     }
   }
 
-  /// Try to parse a datagram into a hand-ID → landmarks map.
+  /// Try to parse a datagram into TrackerData.
   /// Returns null on any parse error or unexpected format.
-  Map<int, List<Landmark>>? _tryDecode(Datagram datagram) {
+  TrackerData? _tryDecode(Datagram datagram) {
     try {
       final jsonStr = utf8.decode(datagram.data);
       final decoded = json.decode(jsonStr);
@@ -125,10 +156,20 @@ class UdpService {
             }).toList();
           }
         }
-        return result;
+        
+        Vector2? facePos;
+        if (decoded.containsKey('face')) {
+          final faceObj = decoded['face'];
+          facePos = Vector2(
+            (faceObj['x'] as num).toDouble(),
+            (faceObj['y'] as num).toDouble(),
+          );
+        }
+
+        return TrackerData(hands: result, face: facePos);
       } else if (decoded is List && decoded.length == 21) {
         // Legacy single-hand format
-        return {
+        final hands = {
           0: decoded.map((item) {
             return Landmark(
               x: (item['x'] as num).toDouble(),
@@ -137,6 +178,7 @@ class UdpService {
             );
           }).toList(),
         };
+        return TrackerData(hands: hands, face: null);
       }
     } catch (_) {
       // Silently ignore malformed packets

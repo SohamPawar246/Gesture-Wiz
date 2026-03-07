@@ -6,12 +6,12 @@ import '../../models/spell.dart';
 import '../palette.dart';
 import 'enemy.dart';
 
-/// A spell projectile that flies toward a target enemy and damages on contact.
-/// Behavior varies by SpellType.
+/// A projectile that flies toward a target enemy and damages on contact.
+/// Now works with GameAction (ActionType) instead of the old Spell combos.
 class Projectile extends PositionComponent with HasGameReference {
-  final Spell spell;
+  final GameAction action;
   final Enemy? target;
-  final void Function(Enemy enemy, Spell spell)? onHit;
+  final void Function(Enemy enemy, GameAction action)? onHit;
   
   double _life = 0;
   final double _speed = 600.0;
@@ -20,7 +20,7 @@ class Projectile extends PositionComponent with HasGameReference {
 
   Projectile({
     required Vector2 startPosition,
-    required this.spell,
+    required this.action,
     this.target,
     this.onHit,
   }) : super(position: startPosition.clone(), anchor: Anchor.center);
@@ -36,21 +36,25 @@ class Projectile extends PositionComponent with HasGameReference {
       return;
     }
 
-    switch (spell.type) {
-      case SpellType.attack:
+    switch (action.type) {
+      case ActionType.attack:
         _moveToTarget(dt);
         break;
-      case SpellType.defense:
-        // Defense expands outward as a shield — handled in render
-        _life += dt; // Extra speed for shield expansion
-        if (_life > 1.5) removeFromParent();
-        break;
-      case SpellType.heal:
-        // Heal is instant — just visual
+      case ActionType.push:
+        // Force push expands outward
+        _life += dt; // Extra speed for expansion
         if (_life > 1.0) removeFromParent();
         break;
-      case SpellType.ultimate:
-        // Ultimate radiates outward hitting everything
+      case ActionType.shield:
+        // Shield is sustained — handled elsewhere, this is just visual
+        if (_life > 0.5) removeFromParent();
+        break;
+      case ActionType.grab:
+        // No projectile for grab
+        removeFromParent();
+        break;
+      case ActionType.ultimate:
+        // Overwatch pulse radiates outward
         if (_life > 1.5) removeFromParent();
         break;
     }
@@ -62,9 +66,8 @@ class Projectile extends PositionComponent with HasGameReference {
       final dist = dir.length;
       
       if (dist < 60.0) {
-        // Hit!
         _hasHit = true;
-        onHit?.call(target!, spell);
+        onHit?.call(target!, action);
         removeFromParent();
         return;
       }
@@ -72,7 +75,7 @@ class Projectile extends PositionComponent with HasGameReference {
       dir.normalize();
       position += dir * _speed * dt;
     } else {
-      // No target — fly straight ahead (up the screen)
+      // No target — fly straight ahead (up screen toward vanishing point)
       position.y -= _speed * dt;
       if (position.y < -50) removeFromParent();
     }
@@ -80,18 +83,20 @@ class Projectile extends PositionComponent with HasGameReference {
 
   @override
   void render(Canvas canvas) {
-    switch (spell.type) {
-      case SpellType.attack:
+    switch (action.type) {
+      case ActionType.attack:
         _renderAttackProjectile(canvas);
         break;
-      case SpellType.defense:
-        _renderShieldWall(canvas);
+      case ActionType.push:
+        _renderForcePush(canvas);
         break;
-      case SpellType.heal:
-        _renderHealEffect(canvas);
+      case ActionType.shield:
+        _renderShieldWard(canvas);
         break;
-      case SpellType.ultimate:
-        _renderUltimateBlast(canvas);
+      case ActionType.grab:
+        break; // No visual
+      case ActionType.ultimate:
+        _renderOverwatchPulse(canvas);
         break;
     }
   }
@@ -101,12 +106,12 @@ class Projectile extends PositionComponent with HasGameReference {
 
     // Outer glow
     final glowPaint = Paint()
-      ..color = spell.effectColor.withValues(alpha: 0.3 * flicker)
+      ..color = action.effectColor.withValues(alpha: 0.3 * flicker)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
     canvas.drawCircle(Offset.zero, 20, glowPaint);
 
     // Core
-    final corePaint = Paint()..color = spell.effectColor;
+    final corePaint = Paint()..color = action.effectColor;
     canvas.drawCircle(Offset.zero, 8, corePaint);
 
     // White-hot center
@@ -114,56 +119,58 @@ class Projectile extends PositionComponent with HasGameReference {
     canvas.drawCircle(Offset.zero, 3, whitePaint);
   }
 
-  void _renderShieldWall(Canvas canvas) {
-    final expand = (_life / 1.5).clamp(0.0, 1.0);
+  void _renderForcePush(Canvas canvas) {
+    final expand = (_life / 1.0).clamp(0.0, 1.0);
     final alpha = (1.0 - expand).clamp(0.0, 1.0);
-    final radius = 80 + expand * 200;
+    final radius = 30 + expand * 150;
 
-    // Shield arc
-    final shieldPaint = Paint()
-      ..color = spell.effectColor.withValues(alpha: alpha * 0.4)
+    // Expanding ring
+    final ringPaint = Paint()
+      ..color = action.effectColor.withValues(alpha: alpha * 0.5)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 8.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset.zero, radius: radius),
-      -pi * 0.7, pi * 1.4, false, shieldPaint,
-    );
+      ..strokeWidth = 10.0 * (1 - expand * 0.5)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawCircle(Offset.zero, radius, ringPaint);
 
-    // Inner glow
+    // Inner distortion 
     final innerPaint = Paint()
-      ..color = spell.effectColor.withValues(alpha: alpha * 0.15)
+      ..color = action.effectColor.withValues(alpha: alpha * 0.15)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
-    canvas.drawCircle(Offset.zero, radius * 0.8, innerPaint);
+    canvas.drawCircle(Offset.zero, radius * 0.6, innerPaint);
   }
 
-  void _renderHealEffect(Canvas canvas) {
-    final alpha = (1.0 - _life / 1.0).clamp(0.0, 1.0);
-    final expand = _life * 2;
+  void _renderShieldWard(Canvas canvas) {
+    final alpha = (1.0 - _life / 0.5).clamp(0.0, 1.0);
+    
+    // Hexagonal ward glow
+    final wardPaint = Paint()
+      ..color = action.effectColor.withValues(alpha: alpha * 0.4)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    canvas.drawCircle(Offset.zero, 50, wardPaint);
 
-    // Rising green sparkles
-    for (int i = 0; i < 8; i++) {
-      final angle = i * pi * 2 / 8 + _time * 2;
-      final r = 20.0 + expand * 30;
-      final x = cos(angle) * r;
-      final y = sin(angle) * r - expand * 40;
-
-      final sparkPaint = Paint()
-        ..color = spell.effectColor.withValues(alpha: alpha * 0.7)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-      canvas.drawCircle(Offset(x, y), 4, sparkPaint);
+    // Ward outline
+    final outlinePaint = Paint()
+      ..color = action.effectColor.withValues(alpha: alpha * 0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+    
+    // Draw hexagon
+    final path = Path();
+    for (int i = 0; i < 6; i++) {
+      final angle = i * pi / 3 - pi / 6;
+      final x = cos(angle) * 40;
+      final y = sin(angle) * 40;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
     }
-
-    // Center + cross
-    final crossPaint = Paint()
-      ..color = spell.effectColor.withValues(alpha: alpha)
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(0, -12), Offset(0, 12), crossPaint);
-    canvas.drawLine(Offset(-12, 0), Offset(12, 0), crossPaint);
+    path.close();
+    canvas.drawPath(path, outlinePaint);
   }
 
-  void _renderUltimateBlast(Canvas canvas) {
+  void _renderOverwatchPulse(Canvas canvas) {
     final expand = (_life / 1.5).clamp(0.0, 1.0);
     final alpha = (1.0 - expand).clamp(0.0, 1.0);
     final w = game.size.x;
@@ -171,7 +178,7 @@ class Projectile extends PositionComponent with HasGameReference {
 
     // Massive expanding ring
     final ringPaint = Paint()
-      ..color = spell.effectColor.withValues(alpha: alpha * 0.3)
+      ..color = action.effectColor.withValues(alpha: alpha * 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 15 * (1 - expand)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
@@ -182,5 +189,23 @@ class Projectile extends PositionComponent with HasGameReference {
       ..color = Palette.fireGold.withValues(alpha: alpha * 0.2)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30);
     canvas.drawCircle(Offset.zero, radius * 0.6, firePaint);
+
+    // Eye symbol at center
+    if (alpha > 0.3) {
+      final eyePaint = Paint()
+        ..color = Colors.white.withValues(alpha: alpha * 0.8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0;
+      
+      // Simple eye shape
+      final eyePath = Path();
+      eyePath.moveTo(-30, 0);
+      eyePath.quadraticBezierTo(0, -20, 30, 0);
+      eyePath.quadraticBezierTo(0, 20, -30, 0);
+      canvas.drawPath(eyePath, eyePaint);
+      
+      // Pupil
+      canvas.drawCircle(Offset.zero, 6, Paint()..color = Colors.white.withValues(alpha: alpha));
+    }
   }
 }

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="THE EYE — A Big Brother surveillance dungeon defense game with hand tracking">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="THE EYE">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>THE EYE — Big Brother</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* Hide the webcam video element — MediaPipe reads it internally */
+    #mp-video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
+  </style>
+</head>
+<body>
+  <!-- Hidden video element for MediaPipe webcam capture -->
+  <video id="mp-video" autoplay playsinline muted></video>
+
+  <!-- MediaPipe Vision bridge (hand + face tracking) -->
+  <script type="module" src="mediapipe_bridge.js"></script>
+
+  <!-- Flutter bootstrap -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

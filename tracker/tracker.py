@@ -74,6 +74,13 @@ def main():
     )
     landmarker = vision.HandLandmarker.create_from_options(options)
 
+    # --- Create FaceDetector ---
+    mp_face_detection = mp.solutions.face_detection
+    face_detection = mp_face_detection.FaceDetection(
+        model_selection=0, # 0 for fast/short-range
+        min_detection_confidence=0.5
+    )
+
     # --- Webcam ---
     cap = cv2.VideoCapture(CAMERA_INDEX)
     if not cap.isOpened():
@@ -118,14 +125,35 @@ def main():
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-            # Detect
+            # Detect Hands
             result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
             preview = frame.copy()
 
+            # Detect Face (for camera pan)
+            face_result = face_detection.process(rgb_frame)
+            face_data = None
+            if face_result.detections:
+                # Use the first detected face
+                detection = face_result.detections[0]
+                bbox = detection.location_data.relative_bounding_box
+                # Calculate center of the face bounding box
+                face_x = bbox.xmin + (bbox.width / 2.0)
+                face_y = bbox.ymin + (bbox.height / 2.0)
+                face_data = {"x": round(face_x, 5), "y": round(face_y, 5)}
+                
+                # Draw small circle on face center for debug
+                cx = int(face_x * actual_w)
+                cy = int(face_y * actual_h)
+                cv2.circle(preview, (cx, cy), 8, (0, 255, 0), -1)
+
             # ----------------------------------------------------------------
             # LANDMARK UDP SEND — every single frame, no skipping
             # ----------------------------------------------------------------
+            payload_dict = {"hands": []}
+            if face_data:
+                payload_dict["face"] = face_data
+
             if result.hand_landmarks:
                 hands_data = []
 
@@ -154,12 +182,10 @@ def main():
                         preview, hand_proto, mp_hands_connections.HAND_CONNECTIONS
                     )
 
-                payload = json.dumps({"hands": hands_data}).encode("utf-8")
-                sock.sendto(payload, (UDP_IP, LANDMARK_PORT))
-            else:
-                # Always send an empty hands packet so Dart knows tracking is lost
-                payload = json.dumps({"hands": []}).encode("utf-8")
-                sock.sendto(payload, (UDP_IP, LANDMARK_PORT))
+                payload_dict["hands"] = hands_data
+
+            payload = json.dumps(payload_dict).encode("utf-8")
+            sock.sendto(payload, (UDP_IP, LANDMARK_PORT))
 
             # ----------------------------------------------------------------
             # VIDEO UDP SEND — throttled to every 3rd frame to save bandwidth
@@ -183,6 +209,7 @@ def main():
         cap.release()
         cv2.destroyAllWindows()
         landmarker.close()
+        face_detection.close()
         sock.close()
         print("[Tracker] Stopped.")
 

@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../models/spell.dart';
-import '../systems/gesture/gesture_type.dart';
 import '../game/palette.dart';
 
+/// Displays the player's available actions and their gesture mappings.
+/// Replaces the old Grimoire spell-combo screen.
 class GrimoireScreen extends StatelessWidget {
-  final List<Spell> knownSpells;
+  final List<GameAction> knownActions;
 
-  const GrimoireScreen({super.key, required this.knownSpells});
+  const GrimoireScreen({super.key, required this.knownActions});
 
   @override
   Widget build(BuildContext context) {
@@ -15,92 +16,64 @@ class GrimoireScreen extends StatelessWidget {
       backgroundColor: Palette.bgDeep,
       appBar: AppBar(
         title: const Text(
-          'GRIMOIRE',
+          'ACTIONS',
           style: TextStyle(
             fontFamily: 'monospace',
             fontWeight: FontWeight.w900,
-            letterSpacing: 6.0,
+            letterSpacing: 4.0,
             color: Palette.fireGold,
           ),
         ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        backgroundColor: Palette.bgDark,
         iconTheme: const IconThemeData(color: Palette.fireGold),
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: knownSpells.length,
+        itemCount: knownActions.length,
         itemBuilder: (context, index) {
-          final spell = knownSpells[index];
+          final action = knownActions[index];
           return Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Palette.uiDarkPanel,
-              border: Border.all(
-                color: spell.effectColor.withValues(alpha: 0.4),
-                width: 1.5,
-              ),
+              border: Border.all(color: action.effectColor.withValues(alpha: 0.4), width: 1.5),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      spell.name.toUpperCase(),
-                      style: TextStyle(
-                        color: spell.effectColor,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        fontFamily: 'monospace',
-                        letterSpacing: 3.0,
-                      ),
-                    ),
-                    Text(
-                      'MANA: ${spell.manaCost.toInt()}',
-                      style: const TextStyle(
-                        color: Palette.uiMana,
-                        fontSize: 13,
-                        fontFamily: 'monospace',
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                // Color indicator
+                Container(
+                  width: 8,
+                  height: 40,
+                  color: action.effectColor,
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'GESTURE SEQUENCE:',
-                  style: TextStyle(
-                    color: Palette.uiGrey,
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                    letterSpacing: 2.0,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: spell.requiredGestures.map((g) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Palette.fireDeep.withValues(alpha: 0.4),
-                        border: Border.all(color: Palette.fireMid.withValues(alpha: 0.5)),
-                      ),
-                      child: Text(
-                        g.displayName.toUpperCase(),
-                        style: const TextStyle(
-                          color: Palette.fireGold,
+                const SizedBox(width: 14),
+                // Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        action.name.toUpperCase(),
+                        style: TextStyle(
+                          color: action.effectColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
                           fontFamily: 'monospace',
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          letterSpacing: 1.5,
+                          letterSpacing: 2.0,
                         ),
                       ),
-                    );
-                  }).toList(),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Gesture: ${action.gesture.displayName} | Mana: ${action.manaCost.toInt()} | Cooldown: ${action.cooldown}s',
+                        style: const TextStyle(
+                          color: Palette.uiGrey,
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
