@@ -48,6 +48,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
   // Shield state
   double _shieldTimer = 0;
   bool _shieldActive = false;
+  Vector2 _shieldHandPos = Vector2.zero();
 
   // Gesture Subsystem — per hand
   final RuleBasedRecognizer _gestureRecognizer = RuleBasedRecognizer();
@@ -189,6 +190,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     _killStreakTimer = 0;
     _shieldTimer = 0;
     _shieldActive = false;
+    _shieldHandPos = Vector2.zero();
     _gameTime = 0;
     _gameRunning = true;
   }
@@ -223,8 +225,10 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     final bool usingTracking = trackingService != null && trackingService!.isConnected;
 
     // --- Face tracking for camera pan/parallax ---
-    if (usingTracking && trackingService!.facePosition != null) {
-      final facePos = trackingService!.facePosition!;
+    // Face detection runs independently of hand tracking — apply it even when
+    // no hands are visible so head-tracking always works.
+    final facePos = trackingService?.facePosition;
+    if (facePos != null) {
       _background.parallaxX = facePos.x;
       _background.parallaxY = facePos.y;
     } else {
@@ -297,7 +301,10 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       }
 
       if (enemy.reachedPlayer) {
-        if (_shieldTimer > 0 || _shieldActive) {
+        // Shield only blocks when the open-palm hand is physically near the enemy.
+        final shieldBlocks = (_shieldTimer > 0 || _shieldActive) &&
+            _shieldHandPos.distanceTo(enemy.position) < size.x * 0.28;
+        if (shieldBlocks) {
           AudioManager.playSfx('shield.wav', volume: 0.5);
           enemy.takeDamage(999);
           add(FloatingText(
@@ -433,6 +440,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     playerStats.consumeMana(drain);
 
     _shieldActive = true;
+    _shieldHandPos = position.clone();
     _shieldTimer = 0.3; // Lingers briefly after release
   }
 

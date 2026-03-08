@@ -8,6 +8,9 @@ import 'gesture_type.dart';
 /// - Per-gesture debounce tuning (instant actions need fewer frames)
 /// - Cooldown after confirmation to prevent rapid re-triggering
 /// - Velocity gate: suppresses ALL recognition when the hand is shaking violently
+/// - Requires-rest gate: after an instant gesture fires, the user must return
+///   to a neutral pose (none / openPalm) for [_restRequired] frames before the
+///   same or any other instant gesture can fire again.
 class GestureStateMachine {
   GestureType _currentGesture = GestureType.none;
   GestureType _confirmedGesture = GestureType.none;
@@ -17,6 +20,14 @@ class GestureStateMachine {
   /// Velocity gate state
   Landmark? _prevWrist;
   double _suppressionTimer = 0;
+
+  /// Requires-rest state: set true after an instant gesture fires.
+  /// Cleared only after the user holds a neutral pose for [_restRequired] frames.
+  bool _needsReset = false;
+  int _restFrames = 0;
+
+  /// How many consecutive neutral frames are needed to exit the requires-rest state.
+  static const int _restRequired = 5;
 
   /// Normalized velocity threshold — if wrist moves more than this between frames,
   /// we assume the hand is shaking and suppress all gesture recognition.
@@ -57,8 +68,7 @@ class GestureStateMachine {
       if (_prevWrist != null) {
         final dx = wrist.x - _prevWrist!.x;
         final dy = wrist.y - _prevWrist!.y;
-        final velocity = (dx * dx + dy * dy);  // Squared distance for speed
-        // Use squared threshold to avoid sqrt
+        final velocity = (dx * dx + dy * dy);
         if (velocity > _velocityThreshold * _velocityThreshold) {
           _suppressionTimer = _suppressionDuration;
           _prevWrist = wrist;
@@ -68,6 +78,25 @@ class GestureStateMachine {
         }
       }
       _prevWrist = wrist;
+    }
+
+    // --- Requires-rest gate ---
+    // After an instant gesture fires, block everything until the user holds
+    // a neutral / open-palm pose for _restRequired consecutive frames.
+    if (_needsReset) {
+      final isNeutral = detectedThisFrame == GestureType.none ||
+                        detectedThisFrame == GestureType.openPalm;
+      if (isNeutral) {
+        _restFrames++;
+        if (_restFrames >= _restRequired) {
+          _needsReset = false;
+          _restFrames = 0;
+          _confirmedGesture = GestureType.none;
+        }
+      } else {
+        _restFrames = 0;
+      }
+      return GestureType.none;
     }
 
     // --- Cooldown active — suppress all output ---
@@ -98,9 +127,11 @@ class GestureStateMachine {
           _confirmedGesture = _currentGesture;
           return _confirmedGesture;
         } else if (_currentGesture != _confirmedGesture) {
-          // Instant gestures: fire once, then cooldown
+          // Instant gestures: fire once, then require rest before re-firing
           _confirmedGesture = _currentGesture;
           _cooldownFrames = cooldownAfterConfirm;
+          _needsReset = true;
+          _restFrames = 0;
           return _confirmedGesture;
         }
       }
@@ -121,5 +152,7 @@ class GestureStateMachine {
     _cooldownFrames = 0;
     _suppressionTimer = 0;
     _prevWrist = null;
+    _needsReset = false;
+    _restFrames = 0;
   }
 }

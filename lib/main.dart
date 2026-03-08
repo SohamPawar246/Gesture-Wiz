@@ -1,12 +1,15 @@
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/scheduler.dart';
 
 import 'ui/hud.dart';
 import 'ui/game_over_screen.dart';
 import 'ui/tutorial_screen.dart';
+import 'ui/main_menu_screen.dart';
+import 'ui/gesture_cursor_overlay.dart';
 import 'game/fpv_game.dart';
 import 'game/palette.dart';
+import 'models/gesture_cursor_controller.dart';
 import 'package:fpv_magic/systems/hand_tracking/tracking_service.dart';
 import 'package:fpv_magic/systems/hand_tracking/tracking_factory.dart'
     if (dart.library.js_interop) 'package:fpv_magic/systems/hand_tracking/tracking_factory_web.dart';
@@ -25,18 +28,15 @@ class FpvMagicApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'THE EYE — Big Brother',
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: Palette.bgDeep,
-      ),
-      home: const Scaffold(
-        body: GameScreen(),
-      ),
+      title: 'PYROMANCER',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: Palette.bgDeep),
+      home: const Scaffold(body: GameScreen()),
     );
   }
 }
 
-enum GameState { tutorial, playing, gameOver, victory }
+enum GameState { mainMenu, tutorial, playing, gameOver, victory }
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -45,18 +45,21 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late final PlayerStats playerStats;
   late final TrackingService trackingService;
+  late final GestureCursorController _cursorController;
+  Ticker? _cursorTicker;
   FpvGame? game;
-  
+
   bool statsLoaded = false;
-  GameState gameState = GameState.tutorial;
+  GameState gameState = GameState.mainMenu;
   GestureType activeGesture = GestureType.none;
 
   @override
   void initState() {
     super.initState();
+    _cursorController = GestureCursorController();
     _initGameSystems();
   }
 
@@ -65,11 +68,26 @@ class _GameScreenState extends State<GameScreen> {
     playerStats = PlayerStats(saveSystem: saveSystem);
     await playerStats.load();
 
-    // Conditional: Web uses MediaPipe JS bridge, Desktop uses UDP
     trackingService = createTrackingService();
     await trackingService.start();
 
+    // Start the cursor ticker — drives gesture-cursor on UI screens.
+    Duration? prevElapsed;
+    _cursorTicker = createTicker((elapsed) {
+      if (!mounted) return;
+      final dt = prevElapsed != null
+          ? (elapsed - prevElapsed!).inMicroseconds / 1_000_000.0
+          : 0.016;
+      prevElapsed = elapsed;
+      _cursorController.update(trackingService, dt);
+    });
+    _cursorTicker!.start();
+
     if (mounted) setState(() => statsLoaded = true);
+  }
+
+  void _goToTutorial() {
+    setState(() => gameState = GameState.tutorial);
   }
 
   void _startGame() {
@@ -91,9 +109,7 @@ class _GameScreenState extends State<GameScreen> {
           if (mounted) setState(() => gameState = GameState.victory);
         });
       },
-      onWaveChanged: (wave) {
-        // Wave changed — HUD will update via playerStats listener
-      },
+      onWaveChanged: (wave) {},
       playerStats: playerStats,
       trackingService: trackingService,
     );
@@ -106,8 +122,14 @@ class _GameScreenState extends State<GameScreen> {
     setState(() => gameState = GameState.playing);
   }
 
+  void _backToMenu() {
+    setState(() => gameState = GameState.mainMenu);
+  }
+
   @override
   void dispose() {
+    _cursorTicker?.stop();
+    _cursorController.dispose();
     trackingService.dispose();
     super.dispose();
   }
@@ -118,17 +140,61 @@ class _GameScreenState extends State<GameScreen> {
       return Container(
         color: Palette.bgDeep,
         child: const Center(
-          child: CircularProgressIndicator(color: Palette.fireGold),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Palette.fireGold),
+              SizedBox(height: 24),
+              Text(
+                'PYROMANCER',
+                style: TextStyle(
+                  color: Palette.fireGold,
+                  fontFamily: 'monospace',
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 6,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'LOADING...',
+                style: TextStyle(
+                  color: Palette.uiGrey,
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  letterSpacing: 3,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    // Tutorial screen
-    if (gameState == GameState.tutorial) {
-      return TutorialScreen(onComplete: _startGame);
+    // ── Main Menu ────────────────────────────────────────────────────
+    if (gameState == GameState.mainMenu) {
+      return GestureCursorLayer(
+        controller: _cursorController,
+        child: MainMenuScreen(
+          controller: _cursorController,
+          onPlayPressed: _goToTutorial,
+          onHowToPlay: _goToTutorial,
+        ),
+      );
     }
 
-    // Game + HUD + optional overlay
+    // ── Tutorial ─────────────────────────────────────────────────────
+    if (gameState == GameState.tutorial) {
+      return GestureCursorLayer(
+        controller: _cursorController,
+        child: TutorialScreen(
+          onComplete: _startGame,
+          controller: _cursorController,
+        ),
+      );
+    }
+
+    // ── Game + HUD + optional overlays ───────────────────────────────
     return Stack(
       children: [
         // 1. Background gradient
@@ -137,37 +203,35 @@ class _GameScreenState extends State<GameScreen> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                Palette.bgDark,
-                Palette.bgDeep,
-                Palette.bgDeep,
-              ],
+              colors: [Palette.bgDark, Palette.bgDeep, Palette.bgDeep],
             ),
           ),
         ),
-        
+
         // 2. The Flame Game
         if (game != null) GameWidget(game: game!),
-        
+
         // 3. Flutter UI Overlay (HUD)
         ListenableBuilder(
           listenable: playerStats,
           builder: (context, _) {
-            return HUD(
-              activeGesture: activeGesture,
-              playerStats: playerStats,
-            );
-          }
+            return HUD(activeGesture: activeGesture, playerStats: playerStats);
+          },
         ),
 
-        // 4. Game Over / Victory overlay
+        // 4. Game Over / Victory overlay — wrapped with gesture cursor layer
         if (gameState == GameState.gameOver || gameState == GameState.victory)
-          GameOverScreen(
-            isVictory: gameState == GameState.victory,
-            score: playerStats.score,
-            kills: playerStats.killCount,
-            wave: playerStats.currentWave,
-            onRestart: _restartGame,
+          GestureCursorLayer(
+            controller: _cursorController,
+            child: GameOverScreen(
+              controller: _cursorController,
+              isVictory: gameState == GameState.victory,
+              score: playerStats.score,
+              kills: playerStats.killCount,
+              wave: playerStats.currentWave,
+              onRestart: _restartGame,
+              onMainMenu: _backToMenu,
+            ),
           ),
       ],
     );

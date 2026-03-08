@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/spell.dart';
 import '../game/palette.dart';
+import '../systems/gesture/gesture_type.dart';
 
 /// Displays the player's available actions and their gesture mappings.
 /// Replaces the old Grimoire spell-combo screen.
@@ -37,16 +38,15 @@ class GrimoireScreen extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Palette.uiDarkPanel,
-              border: Border.all(color: action.effectColor.withValues(alpha: 0.4), width: 1.5),
+              border: Border.all(
+                color: action.effectColor.withValues(alpha: 0.4),
+                width: 1.5,
+              ),
             ),
             child: Row(
               children: [
                 // Color indicator
-                Container(
-                  width: 8,
-                  height: 40,
-                  color: action.effectColor,
-                ),
+                Container(width: 8, height: 40, color: action.effectColor),
                 const SizedBox(width: 14),
                 // Info
                 Expanded(

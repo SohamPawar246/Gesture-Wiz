@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flame/components.dart';
+import 'package:flame/effects.dart';
 import 'package:flutter/material.dart';
 import 'package:flame/particles.dart';
 
@@ -19,24 +20,77 @@ class SpellEffect extends PositionComponent {
 
   @override
   Future<void> onLoad() async {
-    // 1. Spell Name — floating text with warm glow
+    // 0. Immediate impact shockwave ring (expanding, short-lived)
+    final shockColor = effectColor;
+    add(
+      ParticleSystemComponent(
+        particle: Particle.generate(
+          count: 1,
+          lifespan: 0.5,
+          generator: (_) => ComputedParticle(
+            renderer: (canvas, particle) {
+              final progress = particle.progress;
+              final radius = 20 + progress * 140;
+              final alpha = (1.0 - progress).clamp(0.0, 1.0);
+
+              // Outer glow ring
+              canvas.drawCircle(
+                Offset.zero,
+                radius,
+                Paint()
+                  ..color = shockColor.withValues(alpha: alpha * 0.25)
+                  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18)
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 18 * (1 - progress),
+              );
+              // Crisp ring
+              canvas.drawCircle(
+                Offset.zero,
+                radius,
+                Paint()
+                  ..color = Palette.fireWhite.withValues(alpha: alpha * 0.7)
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 3 * (1 - progress),
+              );
+              // Inner fill
+              canvas.drawCircle(
+                Offset.zero,
+                radius * 0.6,
+                Paint()
+                  ..color = shockColor.withValues(alpha: alpha * 0.08)
+                  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    // 1. Spell Name — floating text with warm glow (floats upward)
     final textComp = TextComponent(
       text: spellName.toUpperCase(),
       textRenderer: TextPaint(
         style: TextStyle(
           color: Palette.fireGold,
-          fontSize: 28,
+          fontSize: 30,
           fontWeight: FontWeight.w900,
           fontFamily: 'monospace',
-          letterSpacing: 3.0,
+          letterSpacing: 3.5,
           shadows: const [
-            Shadow(blurRadius: 12, color: Palette.fireDeep),
-            Shadow(blurRadius: 24, color: Palette.fireDeep),
+            Shadow(blurRadius: 14, color: Palette.fireDeep),
+            Shadow(blurRadius: 28, color: Palette.fireDeep),
+            Shadow(blurRadius: 6, color: Palette.fireWhite),
           ],
         ),
       ),
       anchor: Anchor.center,
-      position: Vector2(0, -70),
+      position: Vector2(0, -55),
+    );
+    textComp.add(
+      MoveByEffect(
+        Vector2(0, -70),
+        EffectController(duration: 1.6, curve: Curves.decelerate),
+      ),
     );
     add(textComp);
 
@@ -51,7 +105,7 @@ class SpellEffect extends PositionComponent {
           final angle = random.nextDouble() * 2 * pi;
           final vx = cos(angle) * speed;
           final vy = sin(angle) * speed;
-          
+
           // Blend between spell color and fire gold
           final t = random.nextDouble();
           final particleColor = Color.lerp(effectColor, Palette.fireGold, t)!;
@@ -100,7 +154,7 @@ class SpellEffect extends PositionComponent {
         generator: (i) {
           final speed = random.nextDouble() * 400 + 200;
           final angle = random.nextDouble() * 2 * pi;
-          
+
           return AcceleratedParticle(
             acceleration: Vector2(0, 200),
             speed: Vector2(cos(angle) * speed, sin(angle) * speed),
@@ -133,7 +187,7 @@ class SpellEffect extends PositionComponent {
         lifespan: 2.5,
         generator: (i) {
           final drift = (random.nextDouble() - 0.5) * 60;
-          
+
           return AcceleratedParticle(
             acceleration: Vector2(0, -30), // Float upward
             speed: Vector2(drift, -random.nextDouble() * 40 - 20),
@@ -145,12 +199,12 @@ class SpellEffect extends PositionComponent {
               renderer: (canvas, particle) {
                 final alpha = (1.0 - particle.progress) * 0.7;
                 final size = 2.0 + random.nextDouble() * 2.0;
-                
+
                 final glowPaint = Paint()
                   ..color = Palette.fireGold.withValues(alpha: alpha * 0.4)
                   ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
                 canvas.drawCircle(Offset.zero, size * 2, glowPaint);
-                
+
                 final corePaint = Paint()
                   ..color = Palette.fireBright.withValues(alpha: alpha);
                 canvas.drawCircle(Offset.zero, size, corePaint);
@@ -163,10 +217,12 @@ class SpellEffect extends PositionComponent {
     add(emberTrail);
 
     // Auto-remove after effects finish
-    add(TimerComponent(
-      period: 3.0,
-      removeOnFinish: true,
-      onTick: () => removeFromParent(),
-    ));
+    add(
+      TimerComponent(
+        period: 3.0,
+        removeOnFinish: true,
+        onTick: () => removeFromParent(),
+      ),
+    );
   }
 }

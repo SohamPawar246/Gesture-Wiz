@@ -4,7 +4,7 @@ import '../systems/gesture/gesture_type.dart';
 import '../models/player_stats.dart';
 import '../game/palette.dart';
 
-class HUD extends StatelessWidget {
+class HUD extends StatefulWidget {
   final GestureType activeGesture;
   final PlayerStats playerStats;
 
@@ -14,21 +14,42 @@ class HUD extends StatelessWidget {
     required this.playerStats,
   });
 
-  /// Maps gesture to its action name for display
+  @override
+  State<HUD> createState() => _HUDState();
+}
+
+class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
   String _gestureActionName(GestureType gesture) {
     switch (gesture) {
       case GestureType.none:
-        return 'SCANNING';
+        return 'SCANNING...';
       case GestureType.point:
-        return 'FIRE BOLT';
+        return '☝  FIRE BOLT';
       case GestureType.fist:
-        return 'FORCE PUSH';
+        return '✊  FORCE PUSH';
       case GestureType.openPalm:
-        return 'WARD SHIELD';
+        return '🖐  WARD SHIELD';
       case GestureType.pinch:
-        return 'GRAB';
+        return '🤏  GRIP';
       case GestureType.vSign:
-        return 'OVERWATCH';
+        return '✌  OVERWATCH PULSE';
     }
   }
 
@@ -39,7 +60,7 @@ class HUD extends StatelessWidget {
       case GestureType.point:
         return const Color(0xFFFF6622);
       case GestureType.fist:
-        return const Color(0xFF8844FF);
+        return const Color(0xFF9944FF);
       case GestureType.openPalm:
         return const Color(0xFF44DDFF);
       case GestureType.pinch:
@@ -51,49 +72,85 @@ class HUD extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ps = widget.playerStats;
+    final hpFraction = (ps.currentHp / ps.maxHp).clamp(0.0, 1.0);
+    final isLowHp = hpFraction < 0.30;
+    final gestureColor = _gestureColor(widget.activeGesture);
+
     return Positioned.fill(
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(14.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Top Bar
+              // ─── TOP ROW ───────────────────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildStatsBox(),
-                  _buildTopRight(),
+                  // LEFT: Vitals panel
+                  _buildVitalsPanel(ps, hpFraction, isLowHp),
+
+                  // RIGHT: Combat info
+                  _buildCombatPanel(ps),
                 ],
               ),
-              
+
               const Spacer(),
-              
-              // Bottom — Active action indicator
+
+              // ─── BOTTOM: Active spell indicator ────────────────
               Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Palette.uiDarkPanel,
-                    border: Border.all(
-                      color: _gestureColor(activeGesture).withValues(alpha: 0.6), 
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Text(
-                    _gestureActionName(activeGesture),
-                    style: TextStyle(
-                      color: _gestureColor(activeGesture),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      fontFamily: 'monospace',
-                      letterSpacing: 4.0,
-                      shadows: [
-                        Shadow(blurRadius: 10, color: _gestureColor(activeGesture).withValues(alpha: 0.5)),
-                      ],
-                    ),
-                  ),
+                child: AnimatedBuilder(
+                  animation: _pulseCtrl,
+                  builder: (context, _) {
+                    final isActive = widget.activeGesture != GestureType.none;
+                    final glow = isActive ? 0.4 + 0.6 * _pulseCtrl.value : 0.0;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 28,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: gestureColor.withValues(alpha: 0.08),
+                        border: Border.all(
+                          color: gestureColor.withValues(
+                            alpha: isActive ? 0.7 : 0.3,
+                          ),
+                          width: 1.5,
+                        ),
+                        boxShadow: isActive
+                            ? [
+                                BoxShadow(
+                                  color: gestureColor.withValues(
+                                    alpha: glow * 0.3,
+                                  ),
+                                  blurRadius: 18,
+                                  spreadRadius: 2,
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Text(
+                        _gestureActionName(widget.activeGesture),
+                        style: TextStyle(
+                          color: isActive ? gestureColor : Palette.uiGrey,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          fontFamily: 'monospace',
+                          letterSpacing: 3.5,
+                          shadows: isActive
+                              ? [
+                                  Shadow(
+                                    blurRadius: 10,
+                                    color: gestureColor.withValues(alpha: 0.7),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -103,159 +160,198 @@ class HUD extends StatelessWidget {
     );
   }
 
-  Widget _buildTopRight() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        // Chamber counter
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Palette.uiDarkPanel,
-            border: Border.all(color: Palette.fireMid.withValues(alpha: 0.4), width: 1.5),
-          ),
-          child: Text(
-            'CHAMBER ${playerStats.currentWave}/10',
-            style: const TextStyle(
-              color: Palette.fireGold,
-              fontWeight: FontWeight.w900,
-              fontFamily: 'monospace',
-              fontSize: 14,
-              letterSpacing: 2.0,
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        // Score
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Palette.uiDarkPanel,
-            border: Border.all(color: Palette.fireMid.withValues(alpha: 0.4), width: 1.5),
-          ),
-          child: Text(
-            'SCORE: ${playerStats.score}',
-            style: const TextStyle(
-              color: Palette.uiWhite,
-              fontWeight: FontWeight.w900,
-              fontFamily: 'monospace',
-              fontSize: 13,
-              letterSpacing: 1.5,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatsBox() {
+  // ── Vitals Panel (HP / Mana / XP) ─────────────────────────────
+  Widget _buildVitalsPanel(PlayerStats ps, double hpFraction, bool isLowHp) {
     return Container(
-      width: 210,
-      padding: const EdgeInsets.all(10),
+      width: 220,
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Palette.uiDarkPanel,
-        border: Border.all(color: Palette.fireMid.withValues(alpha: 0.4), width: 1.5),
+        color: const Color(0xCC060C0C),
+        border: Border.all(
+          color: Palette.fireMid.withValues(alpha: 0.2),
+          width: 1.0,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Level & XP
+          // Level row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("LV.${playerStats.level}", 
-                style: const TextStyle(
-                  color: Palette.fireGold,
-                  fontWeight: FontWeight.w900,
-                  fontFamily: 'monospace',
-                  fontSize: 14,
-                  letterSpacing: 2.0,
-                )),
-              Text("${playerStats.currentXp}/${playerStats.maxXp} XP",
-                style: const TextStyle(
-                  color: Palette.uiGrey,
-                  fontFamily: 'monospace',
-                  fontSize: 11,
-                )),
+              _label('LV.${ps.level}', Palette.fireGold, 13),
+              _label('${ps.currentXp}/${ps.maxXp} XP', Palette.uiGrey, 10),
             ],
           ),
           const SizedBox(height: 4),
-          _buildBar(
-            value: playerStats.currentXp / playerStats.maxXp,
-            color: Palette.uiXp,
-            height: 5,
-          ),
+          _glowBar(ps.currentXp / ps.maxXp, Palette.uiXp, 4),
+
           const SizedBox(height: 10),
-          
-          // HP Bar
+
+          // HP
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("HP", style: TextStyle(
-                color: Palette.impactRed,
-                fontWeight: FontWeight.w900,
-                fontFamily: 'monospace',
-                fontSize: 12,
-                letterSpacing: 2.0,
-              )),
-              Text("${playerStats.currentHp.toInt()}/${playerStats.maxHp.toInt()}",
-                style: const TextStyle(
-                  color: Palette.uiGrey,
-                  fontFamily: 'monospace',
-                  fontSize: 11,
-                )),
+              _label('HP', Palette.impactRed, 11),
+              AnimatedBuilder(
+                animation: _pulseCtrl,
+                builder: (context, _) {
+                  final alpha = isLowHp ? 0.6 + 0.4 * _pulseCtrl.value : 1.0;
+                  return Text(
+                    '${ps.currentHp.toInt()}',
+                    style: TextStyle(
+                      color: isLowHp
+                          ? Palette.impactRed.withValues(alpha: alpha)
+                          : Palette.uiGrey,
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      fontWeight: isLowHp ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  );
+                },
+              ),
             ],
           ),
           const SizedBox(height: 4),
-          _buildBar(
-            value: playerStats.currentHp / playerStats.maxHp,
-            color: Palette.impactRed,
-            height: 10,
+          AnimatedBuilder(
+            animation: _pulseCtrl,
+            builder: (context, _) => _glowBar(
+              hpFraction,
+              isLowHp
+                  ? Color.lerp(
+                      Palette.impactRed,
+                      const Color(0xFFFF8844),
+                      _pulseCtrl.value,
+                    )!
+                  : Palette.impactRed,
+              11,
+              glowForce: isLowHp ? 0.3 + 0.4 * _pulseCtrl.value : 0.15,
+            ),
           ),
+
           const SizedBox(height: 10),
-          
-          // Mana Bar
+
+          // Mana
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("MANA", style: TextStyle(
-                color: Palette.uiMana,
-                fontWeight: FontWeight.w900,
-                fontFamily: 'monospace',
-                fontSize: 12,
-                letterSpacing: 2.0,
-              )),
-              Text("${playerStats.currentMana.toInt()}/${playerStats.maxMana.toInt()}",
-                style: const TextStyle(
-                  color: Palette.uiGrey,
-                  fontFamily: 'monospace',
-                  fontSize: 11,
-                )),
+              _label('MANA', Palette.uiMana, 11),
+              _label('${ps.currentMana.toInt()}', Palette.uiGrey, 10),
             ],
           ),
           const SizedBox(height: 4),
-          _buildBar(
-            value: playerStats.currentMana / playerStats.maxMana,
-            color: Palette.uiMana,
-            height: 10,
-          ),
+          _glowBar(ps.currentMana / ps.maxMana, Palette.uiMana, 9),
         ],
       ),
     );
   }
 
-  Widget _buildBar({required double value, required Color color, double height = 8}) {
+  // ── Combat Panel (Wave / Score / Kills) ───────────────────────
+  Widget _buildCombatPanel(PlayerStats ps) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Wave
+        _infoChip(
+          '⚔  CHAMBER ${ps.currentWave}/10',
+          Palette.fireGold,
+          Palette.fireDeep,
+        ),
+        const SizedBox(height: 6),
+        // Score
+        _infoChip('★  ${ps.score}', Palette.fireWhite, const Color(0xFF1A1008)),
+        const SizedBox(height: 6),
+        // Kills
+        _infoChip(
+          '☠  ${ps.killCount} KILLS',
+          Palette.impactPink,
+          const Color(0xFF1A0808),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoChip(String text, Color color, Color bgColor) {
     return Container(
-      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Palette.bgMid.withValues(alpha: 0.5),
+        color: bgColor.withValues(alpha: 0.85),
+        border: Border.all(color: color.withValues(alpha: 0.35), width: 1.0),
+        boxShadow: [
+          BoxShadow(color: color.withValues(alpha: 0.08), blurRadius: 8),
+        ],
       ),
-      child: FractionallySizedBox(
-        alignment: Alignment.centerLeft,
-        widthFactor: value.clamp(0.0, 1.0),
-        child: Container(color: color),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w900,
+          fontFamily: 'monospace',
+          fontSize: 13,
+          letterSpacing: 2.0,
+          shadows: [Shadow(blurRadius: 6, color: color.withValues(alpha: 0.4))],
+        ),
       ),
+    );
+  }
+
+  Widget _label(String text, Color color, double size) {
+    return Text(
+      text,
+      style: TextStyle(
+        color: color,
+        fontWeight: FontWeight.w900,
+        fontFamily: 'monospace',
+        fontSize: size,
+        letterSpacing: 1.5,
+        shadows: [Shadow(blurRadius: 4, color: color.withValues(alpha: 0.4))],
+      ),
+    );
+  }
+
+  Widget _glowBar(
+    double value,
+    Color color,
+    double height, {
+    double glowForce = 0.15,
+  }) {
+    return Stack(
+      children: [
+        // Track
+        Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            border: Border.all(color: color.withValues(alpha: 0.2), width: 0.5),
+          ),
+        ),
+        // Fill
+        FractionallySizedBox(
+          widthFactor: value.clamp(0.0, 1.0),
+          child: Container(
+            height: height,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  color.withValues(alpha: 0.7),
+                  color,
+                  Color.lerp(color, Colors.white, 0.3)!,
+                ],
+                stops: const [0.0, 0.6, 1.0],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: glowForce),
+                  blurRadius: 6,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

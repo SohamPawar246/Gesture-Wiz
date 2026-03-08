@@ -1,62 +1,70 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <base href="$FLUTTER_BASE_HREF">
+  <head>
+    <base href="$FLUTTER_BASE_HREF" />
 
-  <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="THE EYE — A Big Brother surveillance dungeon defense game with hand tracking">
+    <meta charset="UTF-8" />
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible" />
+    <meta
+      name="description"
+      content="PYROMANCER — Hand-tracking spell combat. Snap your fingers. Defeat them all."
+    />
 
-  <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="THE EYE">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+    <!-- iOS meta tags & icons -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="PYROMANCER" />
+    <link rel="apple-touch-icon" href="icons/Icon-192.png" />
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="favicon.png" />
 
-  <title>THE EYE — Big Brother</title>
-  <link rel="manifest" href="manifest.json">
+    <title>PYROMANCER — Hand-Tracking Spell Combat</title>
+    <link rel="manifest" href="manifest.json" />
 
-  <style>
-    /* Hidden video element — MediaPipe reads it, user sees the canvas preview instead */
-    #mp-video {
-      position: fixed;
-      top: 0; left: 0;
-      width: 1px; height: 1px;
-      opacity: 0;
-      pointer-events: none;
-      z-index: -1;
-    }
+    <style>
+      /* Hidden video element — MediaPipe reads it, user sees the canvas preview instead */
+      #mp-video {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+        z-index: -1;
+      }
 
-    /* Live camera preview in bottom-right corner */
-    #mp-preview-canvas {
-      position: fixed;
-      bottom: 16px;
-      right: 16px;
-      width: 240px;
-      height: 180px;
-      border: 2px solid rgba(0, 255, 136, 0.6);
-      border-radius: 4px;
-      z-index: 9999;
-      pointer-events: none;
-      box-shadow: 0 0 20px rgba(0, 255, 136, 0.2), inset 0 0 10px rgba(0, 0, 0, 0.5);
-      background: #000;
-    }
-  </style>
-</head>
-<body>
-  <!-- Hidden video element for MediaPipe webcam capture -->
-  <video id="mp-video" autoplay playsinline muted></video>
+      /* Live camera preview — fire-themed border */
+      #mp-preview-canvas {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        width: 200px;
+        height: 150px;
+        border: 2px solid rgba(255, 140, 30, 0.7);
+        border-radius: 2px;
+        z-index: 9999;
+        pointer-events: none;
+        box-shadow:
+          0 0 20px rgba(204, 68, 0, 0.4),
+          inset 0 0 10px rgba(0, 0, 0, 0.6);
+        background: #050808;
+        opacity: 0.85;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Hidden video element for MediaPipe webcam capture -->
+    <video id="mp-video" autoplay playsinline muted></video>
 
-  <!-- Live camera preview with landmarks overlay -->
-  <canvas id="mp-preview-canvas"></canvas>
+    <!-- Live camera preview with landmarks overlay -->
+    <canvas id="mp-preview-canvas"></canvas>
 
-  <!-- MediaPipe Vision bridge (hand + face tracking) -->
-  <script type="module" src="mediapipe_bridge.js"></script>
+    <!-- MediaPipe Vision bridge (hand + face tracking) -->
+    <script type="module" src="mediapipe_bridge.js"></script>
 
-  <!-- Flutter bootstrap -->
-  <script src="flutter_bootstrap.js" async></script>
-</body>
+    <!-- Flutter bootstrap -->
+    <script src="flutter_bootstrap.js" async></script>
+  </body>
 </html>

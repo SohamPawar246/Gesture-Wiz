@@ -12,7 +12,7 @@ class Projectile extends PositionComponent with HasGameReference {
   final GameAction action;
   final Enemy? target;
   final void Function(Enemy enemy, GameAction action)? onHit;
-  
+
   double _life = 0;
   final double _speed = 600.0;
   bool _hasHit = false;
@@ -64,7 +64,7 @@ class Projectile extends PositionComponent with HasGameReference {
     if (target != null && !target!.isDead) {
       final dir = target!.position - position;
       final dist = dir.length;
-      
+
       if (dist < 60.0) {
         _hasHit = true;
         onHit?.call(target!, action);
@@ -102,21 +102,42 @@ class Projectile extends PositionComponent with HasGameReference {
   }
 
   void _renderAttackProjectile(Canvas canvas) {
-    final flicker = 0.8 + 0.2 * sin(_time * 10);
+    final flicker = 0.75 + 0.25 * sin(_time * 12);
 
-    // Outer glow
-    final glowPaint = Paint()
-      ..color = action.effectColor.withValues(alpha: 0.3 * flicker)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
-    canvas.drawCircle(Offset.zero, 20, glowPaint);
+    // Outer halo
+    final haloPaint = Paint()
+      ..color = action.effectColor.withValues(alpha: 0.18 * flicker)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22);
+    canvas.drawCircle(Offset.zero, 28, haloPaint);
 
-    // Core
-    final corePaint = Paint()..color = action.effectColor;
-    canvas.drawCircle(Offset.zero, 8, corePaint);
+    // Mid flame body
+    final midPaint = Paint()
+      ..color = Palette.fireMid.withValues(alpha: 0.55 * flicker)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    canvas.drawCircle(Offset.zero, 16 * flicker, midPaint);
 
-    // White-hot center
+    // Bright core
+    final corePaint = Paint()
+      ..color = action.effectColor
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawCircle(Offset.zero, 10, corePaint);
+
+    // White-hot nucleus
     final whitePaint = Paint()..color = Palette.fireWhite;
-    canvas.drawCircle(Offset.zero, 3, whitePaint);
+    canvas.drawCircle(Offset.zero, 4.5, whitePaint);
+
+    // Comet tail (offset behind the projectile, drawn as blur streaks)
+    for (int i = 1; i <= 5; i++) {
+      final tailAlpha = (0.3 - i * 0.05) * flicker;
+      final tailPaint = Paint()
+        ..color = Palette.fireGold.withValues(alpha: tailAlpha.clamp(0, 1))
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3.0 + i * 2.0);
+      canvas.drawCircle(
+        Offset(0, i * 10.0),
+        (10 - i * 1.5).clamp(2, 12),
+        tailPaint,
+      );
+    }
   }
 
   void _renderForcePush(Canvas canvas) {
@@ -132,7 +153,7 @@ class Projectile extends PositionComponent with HasGameReference {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
     canvas.drawCircle(Offset.zero, radius, ringPaint);
 
-    // Inner distortion 
+    // Inner distortion
     final innerPaint = Paint()
       ..color = action.effectColor.withValues(alpha: alpha * 0.15)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
@@ -141,7 +162,7 @@ class Projectile extends PositionComponent with HasGameReference {
 
   void _renderShieldWard(Canvas canvas) {
     final alpha = (1.0 - _life / 0.5).clamp(0.0, 1.0);
-    
+
     // Hexagonal ward glow
     final wardPaint = Paint()
       ..color = action.effectColor.withValues(alpha: alpha * 0.4)
@@ -153,7 +174,7 @@ class Projectile extends PositionComponent with HasGameReference {
       ..color = action.effectColor.withValues(alpha: alpha * 0.7)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.0;
-    
+
     // Draw hexagon
     final path = Path();
     for (int i = 0; i < 6; i++) {
@@ -196,16 +217,20 @@ class Projectile extends PositionComponent with HasGameReference {
         ..color = Colors.white.withValues(alpha: alpha * 0.8)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3.0;
-      
+
       // Simple eye shape
       final eyePath = Path();
       eyePath.moveTo(-30, 0);
       eyePath.quadraticBezierTo(0, -20, 30, 0);
       eyePath.quadraticBezierTo(0, 20, -30, 0);
       canvas.drawPath(eyePath, eyePaint);
-      
+
       // Pupil
-      canvas.drawCircle(Offset.zero, 6, Paint()..color = Colors.white.withValues(alpha: alpha));
+      canvas.drawCircle(
+        Offset.zero,
+        6,
+        Paint()..color = Colors.white.withValues(alpha: alpha),
+      );
     }
   }
 }
