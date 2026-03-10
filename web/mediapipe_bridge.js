@@ -1,14 +1,16 @@
 /**
- * MediaPipe Vision JS Bridge for THE EYE
- * 
+ * MediaPipe Vision JS Bridge for PYROMANCER
+ *
+ * Big Brother theme: the webcam feed is rendered as a surveillance camera
+ * with green-tinted overlays, scan-lines, crosshair, and a "BB-CAM" indicator.
+ *
  * Runs HandLandmarker + FaceDetector in-browser using MediaPipe Vision WASM.
- * Webcam feed is processed via requestAnimationFrame.
  * Results are stored in global variables that Dart reads via js_interop.
- * 
+ *
  * Features:
  * - Mirror-corrected coordinates (X flipped for selfie-mode natural movement)
- * - Live camera preview with drawn landmarks in bottom-right corner
- * - Face detection with low-latency smoothing
+ * - Surveillance-style camera preview with landmarks drawn in bottom-right corner
+ * - Face detection — "target acquired" box overlay
  */
 
 // --- State ---
@@ -168,29 +170,44 @@ function drawPreview(rawHands, faceDetections) {
   const cw = previewCanvas.width;
   const ch = previewCanvas.height;
 
-  // Draw mirrored video frame
+  // Draw mirrored video frame with green-tinted surveillance look
   previewCtx.save();
   previewCtx.translate(cw, 0);
-  previewCtx.scale(-1, 1); // Mirror the video
+  previewCtx.scale(-1, 1);
   previewCtx.drawImage(video, 0, 0, cw, ch);
   previewCtx.restore();
 
-  // Dim overlay for contrast
-  previewCtx.fillStyle = "rgba(0, 0, 0, 0.15)";
+  // Green surveillance tint overlay
+  previewCtx.fillStyle = "rgba(0, 40, 0, 0.35)";
   previewCtx.fillRect(0, 0, cw, ch);
 
-  // Draw hand landmarks (use raw/un-mirrored coords, but draw on mirrored canvas)
+  // CRT scan-line effect (every 4 px)
+  previewCtx.fillStyle = "rgba(0, 0, 0, 0.18)";
+  for (let sy = 0; sy < ch; sy += 4) {
+    previewCtx.fillRect(0, sy, cw, 2);
+  }
+
+  // Crosshair in centre
+  const cx = cw / 2, cy = ch / 2, cr = 10;
+  previewCtx.strokeStyle = "rgba(0, 255, 80, 0.35)";
+  previewCtx.lineWidth = 1;
+  previewCtx.beginPath();
+  previewCtx.moveTo(cx - cr - 4, cy); previewCtx.lineTo(cx + cr + 4, cy);
+  previewCtx.moveTo(cx, cy - cr - 4); previewCtx.lineTo(cx, cy + cr + 4);
+  previewCtx.arc(cx, cy, cr, 0, Math.PI * 2);
+  previewCtx.stroke();
+
+  // Draw hand landmarks
   if (rawHands) {
-    const colors = ["#FF6622", "#44DDFF"]; // Orange for hand 0, cyan for hand 1
+    const colors = ["#00FF55", "#44DDFF"];
     for (let h = 0; h < rawHands.length; h++) {
       const lms = rawHands[h];
       const color = colors[h % 2];
 
-      // Draw connections
       previewCtx.strokeStyle = color;
       previewCtx.lineWidth = 1.5;
       for (const [a, b] of HAND_CONNECTIONS) {
-        const ax = (1.0 - lms[a].x) * cw; // Mirror X for drawing
+        const ax = (1.0 - lms[a].x) * cw;
         const ay = lms[a].y * ch;
         const bx = (1.0 - lms[b].x) * cw;
         const by = lms[b].y * ch;
@@ -200,7 +217,6 @@ function drawPreview(rawHands, faceDetections) {
         previewCtx.stroke();
       }
 
-      // Draw landmark dots
       previewCtx.fillStyle = color;
       for (const lm of lms) {
         const px = (1.0 - lm.x) * cw;
@@ -212,35 +228,50 @@ function drawPreview(rawHands, faceDetections) {
     }
   }
 
-  // Draw face bounding box
+  // Draw face bounding box — "TARGET ACQUIRED" style
   if (faceDetections && faceDetections.length > 0) {
     const det = faceDetections[0];
     const bb = det.boundingBox;
-    // Mirror the bounding box
     const rx = cw - ((bb.originX + bb.width) / video.videoWidth) * cw;
     const ry = (bb.originY / video.videoHeight) * ch;
     const rw = (bb.width / video.videoWidth) * cw;
     const rh = (bb.height / video.videoHeight) * ch;
 
-    previewCtx.strokeStyle = "#00FF88";
+    // Corner brackets instead of full rectangle
+    const blen = 8;
+    previewCtx.strokeStyle = "#00FF55";
     previewCtx.lineWidth = 2;
-    previewCtx.strokeRect(rx, ry, rw, rh);
-
-    // Face center dot
-    previewCtx.fillStyle = "#00FF88";
     previewCtx.beginPath();
-    previewCtx.arc(rx + rw / 2, ry + rh / 2, 4, 0, Math.PI * 2);
-    previewCtx.fill();
+    // Top-left
+    previewCtx.moveTo(rx, ry + blen); previewCtx.lineTo(rx, ry); previewCtx.lineTo(rx + blen, ry);
+    // Top-right
+    previewCtx.moveTo(rx + rw - blen, ry); previewCtx.lineTo(rx + rw, ry); previewCtx.lineTo(rx + rw, ry + blen);
+    // Bottom-left
+    previewCtx.moveTo(rx, ry + rh - blen); previewCtx.lineTo(rx, ry + rh); previewCtx.lineTo(rx + blen, ry + rh);
+    // Bottom-right
+    previewCtx.moveTo(rx + rw - blen, ry + rh); previewCtx.lineTo(rx + rw, ry + rh); previewCtx.lineTo(rx + rw, ry + rh - blen);
+    previewCtx.stroke();
+
+    // "ID" label
+    previewCtx.fillStyle = "#00FF55";
+    previewCtx.font = "bold 8px monospace";
+    previewCtx.fillText("TARGET", rx, ry - 2);
   }
 
-  // "LIVE" indicator
-  previewCtx.fillStyle = "#FF3333";
+  // "BB-CAM" indicator (replaces "LIVE")
+  previewCtx.fillStyle = "#00CC44";
   previewCtx.beginPath();
-  previewCtx.arc(12, 12, 4, 0, Math.PI * 2);
+  previewCtx.arc(10, 10, 4, 0, Math.PI * 2);
   previewCtx.fill();
-  previewCtx.fillStyle = "#FFFFFF";
+  previewCtx.fillStyle = "#00FF55";
   previewCtx.font = "bold 10px monospace";
-  previewCtx.fillText("LIVE", 20, 16);
+  previewCtx.fillText("BB-CAM", 18, 15);
+
+  // Timestamp / ID string bottom-left
+  previewCtx.fillStyle = "rgba(0, 200, 60, 0.6)";
+  previewCtx.font = "7px monospace";
+  const ts = new Date().toISOString().substr(11, 8);
+  previewCtx.fillText("REC " + ts, 4, ch - 4);
 }
 
 // --- Public API (called from Dart via js_interop) ---

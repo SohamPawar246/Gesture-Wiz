@@ -7,7 +7,7 @@
     <meta content="IE=Edge" http-equiv="X-UA-Compatible" />
     <meta
       name="description"
-      content="PYROMANCER — Hand-tracking spell combat. Snap your fingers. Defeat them all."
+      content="PYROMANCER — Year 2084. Big Brother is watching. Fight the Ministry's dungeon with forbidden hand gestures."
     />
 
     <!-- iOS meta tags & icons -->
@@ -35,22 +35,38 @@
         z-index: -1;
       }
 
-      /* Live camera preview — fire-themed border */
+      /* Live camera preview — surveillance / Big Brother themed */
       #mp-preview-canvas {
         position: fixed;
-        bottom: 16px;
+        bottom: 42px;
         right: 16px;
         width: 200px;
         height: 150px;
-        border: 2px solid rgba(255, 140, 30, 0.7);
+        border: 2px solid rgba(0, 200, 60, 0.6);
         border-radius: 2px;
         z-index: 9999;
         pointer-events: none;
         box-shadow:
-          0 0 20px rgba(204, 68, 0, 0.4),
+          0 0 18px rgba(0, 180, 40, 0.35),
           inset 0 0 10px rgba(0, 0, 0, 0.6);
-        background: #050808;
-        opacity: 0.85;
+        background: #030805;
+        opacity: 0.88;
+      }
+
+      /* "BIG BROTHER IS WATCHING" label under the feed */
+      #bb-label {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        width: 200px;
+        text-align: center;
+        font-family: monospace;
+        font-size: 9px;
+        letter-spacing: 2px;
+        color: rgba(0, 200, 60, 0.75);
+        z-index: 9999;
+        pointer-events: none;
+        text-transform: uppercase;
       }
     </style>
   </head>
@@ -60,6 +76,9 @@
 
     <!-- Live camera preview with landmarks overlay -->
     <canvas id="mp-preview-canvas"></canvas>
+
+    <!-- Big Brother surveillance label under the feed -->
+    <div id="bb-label">👁 BIG BROTHER IS WATCHING 👁</div>
 
     <!-- MediaPipe Vision bridge (hand + face tracking) -->
     <script type="module" src="mediapipe_bridge.js"></script>

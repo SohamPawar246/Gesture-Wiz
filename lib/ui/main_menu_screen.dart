@@ -139,7 +139,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                   children: [
                     const Spacer(flex: 2),
 
-                    // Pre-title tag
+                    // Big Brother surveillance tag
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -147,17 +147,18 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                       ),
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: Palette.fireMid.withValues(alpha: 0.4),
+                          color: const Color(0xFF44FF44).withValues(alpha: 0.45),
                           width: 1,
                         ),
+                        color: const Color(0xFF001100),
                       ),
                       child: const Text(
-                        'HAND-TRACKING SPELL COMBAT',
+                        '👁  BIG BROTHER IS WATCHING  👁',
                         style: TextStyle(
-                          color: Palette.fireMid,
+                          color: Color(0xFF44FF44),
                           fontFamily: 'monospace',
                           fontSize: 11,
-                          letterSpacing: 4.0,
+                          letterSpacing: 3.5,
                         ),
                       ),
                     ),
@@ -270,13 +271,48 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                     const SizedBox(height: 12),
 
                     const Text(
-                      '"SNAP YOUR FINGERS. DEFEAT THEM ALL."',
+                      '"SNAP YOUR FINGERS. RESIST THEM ALL."',
                       style: TextStyle(
                         color: Palette.uiGrey,
                         fontFamily: 'monospace',
                         fontSize: 11,
                         letterSpacing: 2.0,
                         fontStyle: FontStyle.italic,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Big Brother storyline blurb
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 460),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xCC001800),
+                        border: Border.all(
+                          color: const Color(0xFF226622),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Text(
+                        'YEAR 2084 — Big Brother has conquered the world.\n'
+                        'Surveillance cameras watch every street corner.\n'
+                        'Your webcam is feeding data to the Ministry right now.\n\n'
+                        'You are one of the last free minds.\n'
+                        'Armed only with forbidden gestures,\n'
+                        'fight through the Ministry\'s dungeon chambers.\n\n'
+                        '— BIG BROTHER SEES YOUR HANDS —',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xFF77BB77),
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                          height: 1.75,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
 
@@ -315,9 +351,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                     const SizedBox(height: 20),
 
                     const Text(
-                      'USE WEBCAM FOR HAND TRACKING  •  OR MOUSE TO PLAY',
+                      'WEBCAM ACTIVE — BIG BROTHER IS WATCHING  •  OR USE MOUSE',
                       style: TextStyle(
-                        color: Color(0xFF444444),
+                        color: Color(0xFF335533),
                         fontFamily: 'monospace',
                         fontSize: 9,
                         letterSpacing: 2.0,
