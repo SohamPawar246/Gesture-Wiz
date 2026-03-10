@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'ui/hud.dart';
 import 'ui/game_over_screen.dart';
 import 'ui/tutorial_screen.dart';
+import 'ui/epilepsy_warning_screen.dart';
 import 'ui/main_menu_screen.dart';
 import 'ui/gesture_cursor_overlay.dart';
 import 'game/fpv_game.dart';
@@ -36,7 +37,7 @@ class FpvMagicApp extends StatelessWidget {
   }
 }
 
-enum GameState { mainMenu, tutorial, playing, gameOver, victory }
+enum GameState { epilepsyWarning, mainMenu, tutorial, playing, gameOver, victory }
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -53,7 +54,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   FpvGame? game;
 
   bool statsLoaded = false;
-  GameState gameState = GameState.mainMenu;
+  GameState gameState = GameState.epilepsyWarning;
   GestureType activeGesture = GestureType.none;
 
   @override
@@ -126,6 +127,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     setState(() => gameState = GameState.mainMenu);
   }
 
+  void _dismissEpilepsyWarning() {
+    setState(() => gameState = GameState.mainMenu);
+  }
+
   @override
   void dispose() {
     _cursorTicker?.stop();
@@ -169,6 +174,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ),
         ),
       );
+    }
+
+    // ── Epilepsy Warning ─────────────────────────────────────────────
+    if (gameState == GameState.epilepsyWarning) {
+      return EpilepsyWarningScreen(onComplete: _dismissEpilepsyWarning);
     }
 
     // ── Main Menu ────────────────────────────────────────────────────
