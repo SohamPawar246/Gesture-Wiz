@@ -27,7 +27,7 @@ class GestureStateMachine {
   int _restFrames = 0;
 
   /// How many consecutive neutral frames are needed to exit the requires-rest state.
-  static const int _restRequired = 5;
+  static const int _restRequired = 3;
 
   /// Normalized velocity threshold — if wrist moves more than this between frames,
   /// we assume the hand is shaking and suppress all gesture recognition.
@@ -43,7 +43,7 @@ class GestureStateMachine {
   final int cooldownAfterConfirm;
 
   GestureStateMachine({
-    this.debounceFrames = 3,
+    this.debounceFrames = 2,
     this.cooldownAfterConfirm = 2,
   });
 
