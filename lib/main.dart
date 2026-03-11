@@ -7,6 +7,7 @@ import 'ui/game_over_screen.dart';
 import 'ui/tutorial_screen.dart';
 import 'ui/epilepsy_warning_screen.dart';
 import 'ui/main_menu_screen.dart';
+import 'ui/story_screen.dart';
 import 'ui/gesture_cursor_overlay.dart';
 import 'game/fpv_game.dart';
 import 'game/palette.dart';
@@ -37,7 +38,15 @@ class FpvMagicApp extends StatelessWidget {
   }
 }
 
-enum GameState { epilepsyWarning, mainMenu, tutorial, playing, gameOver, victory }
+enum GameState {
+  epilepsyWarning,
+  mainMenu,
+  story,
+  tutorial,
+  playing,
+  gameOver,
+  victory,
+}
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
@@ -56,6 +65,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   bool statsLoaded = false;
   GameState gameState = GameState.epilepsyWarning;
   GestureType activeGesture = GestureType.none;
+  bool _bigBrotherGameOver = false;
 
   @override
   void initState() {
@@ -91,6 +101,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     setState(() => gameState = GameState.tutorial);
   }
 
+  void _goToStory() {
+    setState(() => gameState = GameState.story);
+  }
+
   void _startGame() {
     game = FpvGame(
       onGestureDetected: (gesture) {
@@ -102,7 +116,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       },
       onGameOver: () {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => gameState = GameState.gameOver);
+          if (mounted) {
+            setState(() {
+              _bigBrotherGameOver = false;
+              gameState = GameState.gameOver;
+            });
+          }
+        });
+      },
+      onBigBrotherGameOver: () {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _bigBrotherGameOver = true;
+              gameState = GameState.gameOver;
+            });
+          }
         });
       },
       onVictory: () {
@@ -119,6 +148,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _restartGame() {
+    _bigBrotherGameOver = false;
     game?.restartGame();
     setState(() => gameState = GameState.playing);
   }
@@ -189,6 +219,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           controller: _cursorController,
           onPlayPressed: _goToTutorial,
           onHowToPlay: _goToTutorial,
+          onStory: _goToStory,
+        ),
+      );
+    }
+
+    // ── Story ───────────────────────────────────────────────────────
+    if (gameState == GameState.story) {
+      return GestureCursorLayer(
+        controller: _cursorController,
+        child: StoryScreen(
+          controller: _cursorController,
+          onContinue: _backToMenu,
         ),
       );
     }
@@ -236,6 +278,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             child: GameOverScreen(
               controller: _cursorController,
               isVictory: gameState == GameState.victory,
+              isBigBrotherGameOver: _bigBrotherGameOver,
               score: playerStats.score,
               kills: playerStats.killCount,
               wave: playerStats.currentWave,

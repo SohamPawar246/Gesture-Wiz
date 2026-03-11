@@ -7,6 +7,7 @@ import 'gesture_cursor_overlay.dart';
 
 class GameOverScreen extends StatefulWidget {
   final bool isVictory;
+  final bool isBigBrotherGameOver;
   final int score;
   final int kills;
   final int wave;
@@ -17,6 +18,7 @@ class GameOverScreen extends StatefulWidget {
   const GameOverScreen({
     super.key,
     required this.isVictory,
+    this.isBigBrotherGameOver = false,
     required this.score,
     required this.kills,
     required this.wave,
@@ -85,10 +87,20 @@ class _GameOverScreenState extends State<GameOverScreen>
 
   @override
   Widget build(BuildContext context) {
-    final accentColor = widget.isVictory ? Palette.fireGold : Palette.impactRed;
-    final title = widget.isVictory ? 'VICTORY' : 'GAME OVER';
+    final accentColor = widget.isVictory
+        ? Palette.fireGold
+        : widget.isBigBrotherGameOver
+        ? const Color(0xFFFF0000)
+        : Palette.impactRed;
+    final title = widget.isVictory
+        ? 'VICTORY'
+        : widget.isBigBrotherGameOver
+        ? 'DETECTED'
+        : 'GAME OVER';
     final subtitle = widget.isVictory
         ? 'THE DUNGEON HAS FALLEN'
+        : widget.isBigBrotherGameOver
+        ? 'BIG BROTHER NOTICED YOU'
         : 'THE DARKNESS CONSUMED YOU';
     final ctrl = widget.controller;
 
@@ -176,26 +188,29 @@ class _GameOverScreenState extends State<GameOverScreen>
                         animation: _pulseCtrl,
                         builder: (context, _) {
                           final glow = 0.6 + 0.4 * _pulseCtrl.value;
-                          return Text(
-                            title,
-                            style: TextStyle(
-                              color: accentColor,
-                              fontSize: 52,
-                              fontWeight: FontWeight.w900,
-                              fontFamily: 'monospace',
-                              letterSpacing: 8.0,
-                              shadows: [
-                                Shadow(
-                                  blurRadius: 20 * glow,
-                                  color: accentColor.withValues(alpha: glow),
-                                ),
-                                Shadow(
-                                  blurRadius: 50 * glow,
-                                  color: accentColor.withValues(
-                                    alpha: 0.4 * glow,
+                          return FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              title,
+                              style: TextStyle(
+                                color: accentColor,
+                                fontSize: 52,
+                                fontWeight: FontWeight.w900,
+                                fontFamily: 'monospace',
+                                letterSpacing: 8.0,
+                                shadows: [
+                                  Shadow(
+                                    blurRadius: 20 * glow,
+                                    color: accentColor.withValues(alpha: glow),
                                   ),
-                                ),
-                              ],
+                                  Shadow(
+                                    blurRadius: 50 * glow,
+                                    color: accentColor.withValues(
+                                      alpha: 0.4 * glow,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },
@@ -212,6 +227,23 @@ class _GameOverScreenState extends State<GameOverScreen>
                           letterSpacing: 3.0,
                         ),
                       ),
+
+                      if (widget.isBigBrotherGameOver) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'SURVEILLANCE ALERT LEVEL CRITICAL\nYOUR MOVEMENTS HAVE BEEN LOGGED',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: const Color(
+                              0xFFFF4444,
+                            ).withValues(alpha: 0.7),
+                            fontFamily: 'monospace',
+                            fontSize: 10,
+                            letterSpacing: 1.5,
+                            height: 1.6,
+                          ),
+                        ),
+                      ],
 
                       const SizedBox(height: 32),
 

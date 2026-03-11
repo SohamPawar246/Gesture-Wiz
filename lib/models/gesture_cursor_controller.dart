@@ -64,15 +64,14 @@ class GestureCursorController extends ChangeNotifier {
 
       // Index fingertip = MediaPipe landmark 8.
       final tip = landmarks.length > 8 ? landmarks[8] : landmarks[0];
-      _smoothX += (tip.x - _smoothX) * 0.5;
-      _smoothY += (tip.y - _smoothY) * 0.5;
+      _smoothX += (tip.x - _smoothX) * 0.65;
+      _smoothY += (tip.y - _smoothY) * 0.65;
       posX = _smoothX.clamp(0.0, 1.0);
       posY = _smoothY.clamp(0.0, 1.0);
 
       final raw = _recognizer.recognize(landmarks);
       gestureType = _stateMachine.processFrame(
         raw,
-        landmarks: landmarks,
         dt: dt,
       );
 
@@ -90,8 +89,8 @@ class GestureCursorController extends ChangeNotifier {
     // Face tracking is independent of hand visibility — update every frame.
     final face = service.facePosition;
     if (face != null) {
-      faceX += (face.x - faceX) * 0.4;
-      faceY += (face.y - faceY) * 0.4;
+      faceX += (face.x - faceX) * 0.55;
+      faceY += (face.y - faceY) * 0.55;
     } else {
       faceX += (0.5 - faceX) * dt * 2.0;
       faceY += (0.5 - faceY) * dt * 2.0;

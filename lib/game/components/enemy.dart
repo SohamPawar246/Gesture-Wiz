@@ -14,6 +14,7 @@ class Enemy extends PositionComponent with HasGameReference {
   double depth; // 0.0 = far, 1.0 = reached player
   double _flashTimer = 0;
   bool isDead = false;
+  bool isGrabbed = false;
   double _time = 0;
 
   final double corridorX;
@@ -46,7 +47,9 @@ class Enemy extends PositionComponent with HasGameReference {
     _time += dt;
     if (isDead) return;
 
-    depth += data.speed * dt;
+    if (!isGrabbed) {
+      depth += data.speed * dt;
+    }
     if (_flashTimer > 0) _flashTimer -= dt;
 
     final w = game.size.x;

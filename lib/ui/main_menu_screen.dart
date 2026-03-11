@@ -9,12 +9,14 @@ import 'gesture_cursor_overlay.dart';
 class MainMenuScreen extends StatefulWidget {
   final VoidCallback onPlayPressed;
   final VoidCallback onHowToPlay;
+  final VoidCallback onStory;
   final GestureCursorController? controller;
 
   const MainMenuScreen({
     super.key,
     required this.onPlayPressed,
     required this.onHowToPlay,
+    required this.onStory,
     this.controller,
   });
 
@@ -91,282 +93,256 @@ class _MainMenuScreenState extends State<MainMenuScreen>
       children: [
         // Deep atmospheric background
         Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xFF040808),
-                        Color(0xFF0A0F0F),
-                        Color(0xFF180808),
-                      ],
-                      stops: [0.0, 0.55, 1.0],
-                    ),
-                  ),
-                ),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF040808), Color(0xFF0A0F0F), Color(0xFF180808)],
+              stops: [0.0, 0.55, 1.0],
+            ),
+          ),
+        ),
 
-                // Fire particles layer
-                CustomPaint(
-                  painter: _FireParticlePainter(_particles),
-                  child: const SizedBox.expand(),
-                ),
+        // Fire particles layer
+        CustomPaint(
+          painter: _FireParticlePainter(_particles),
+          child: const SizedBox.expand(),
+        ),
 
-                // Bottom fire gradient
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: 200,
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [Color(0x88CC3300), Colors.transparent],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-        // Content
-        FadeTransition(
-            opacity: _fadeInCtrl,
-            child: SafeArea(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Spacer(flex: 2),
-
-                    // Big Brother surveillance tag
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: const Color(0xFF44FF44).withValues(alpha: 0.45),
-                          width: 1,
-                        ),
-                        color: const Color(0xFF001100),
-                      ),
-                      child: const Text(
-                        '👁  BIG BROTHER IS WATCHING  👁',
-                        style: TextStyle(
-                          color: Color(0xFF44FF44),
-                          fontFamily: 'monospace',
-                          fontSize: 11,
-                          letterSpacing: 3.5,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // ═══ MAIN TITLE ═══
-                    AnimatedBuilder(
-                      animation: _pulseCtrl,
-                      builder: (context, _) {
-                        final glow = 0.65 + 0.35 * _pulseCtrl.value;
-                        return Column(
-                          children: [
-                            Text(
-                              'PYRO',
-                              style: TextStyle(
-                                color: Palette.fireWhite,
-                                fontFamily: 'monospace',
-                                fontSize: 72,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 16.0,
-                                height: 0.9,
-                                shadows: [
-                                  Shadow(
-                                    blurRadius: 30 * glow,
-                                    color: Palette.fireDeep.withValues(
-                                      alpha: 0.9 * glow,
-                                    ),
-                                  ),
-                                  Shadow(
-                                    blurRadius: 60 * glow,
-                                    color: Palette.fireMid.withValues(
-                                      alpha: 0.5 * glow,
-                                    ),
-                                  ),
-                                  Shadow(
-                                    blurRadius: 100 * glow,
-                                    color: Palette.fireGold.withValues(
-                                      alpha: 0.3 * glow,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              'MANCER',
-                              style: TextStyle(
-                                color: Palette.fireGold,
-                                fontFamily: 'monospace',
-                                fontSize: 72,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 16.0,
-                                height: 0.9,
-                                shadows: [
-                                  Shadow(
-                                    blurRadius: 30 * glow,
-                                    color: Palette.fireDeep.withValues(
-                                      alpha: 0.9 * glow,
-                                    ),
-                                  ),
-                                  Shadow(
-                                    blurRadius: 80 * glow,
-                                    color: Palette.fireGold.withValues(
-                                      alpha: 0.6 * glow,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Divider line
-                    SizedBox(
-                      width: 320,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            height: 1,
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.transparent,
-                                  Palette.fireGold,
-                                  Colors.transparent,
-                                ],
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            color: const Color(0xFF0A0F0F),
-                            child: const Text(
-                              '✦',
-                              style: TextStyle(
-                                color: Palette.fireGold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    const Text(
-                      '"SNAP YOUR FINGERS. RESIST THEM ALL."',
-                      style: TextStyle(
-                        color: Palette.uiGrey,
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        letterSpacing: 2.0,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Big Brother storyline blurb
-                    Container(
-                      constraints: const BoxConstraints(maxWidth: 460),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xCC001800),
-                        border: Border.all(
-                          color: const Color(0xFF226622),
-                          width: 1,
-                        ),
-                      ),
-                      child: const Text(
-                        'YEAR 2084 — Big Brother has conquered the world.\n'
-                        'Surveillance cameras watch every street corner.\n'
-                        'Your webcam is feeding data to the Ministry right now.\n\n'
-                        'You are one of the last free minds.\n'
-                        'Armed only with forbidden gestures,\n'
-                        'fight through the Ministry\'s dungeon chambers.\n\n'
-                        '— BIG BROTHER SEES YOUR HANDS —',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Color(0xFF77BB77),
-                          fontFamily: 'monospace',
-                          fontSize: 11,
-                          height: 1.75,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-
-                    const Spacer(flex: 3),
-
-                    // Buttons
-                    _gestureWrap(
-                      onTap: widget.onPlayPressed,
-                      child: _MenuButton(
-                        label: '▶   ENTER THE DUNGEON',
-                        color: Palette.fireGold,
-                        onTap: widget.onPlayPressed,
-                        pulse: _pulseCtrl,
-                        isPrimary: true,
-                      ),
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    _gestureWrap(
-                      onTap: widget.onHowToPlay,
-                      child: _MenuButton(
-                        label: '?   HOW TO PLAY',
-                        color: Palette.fireMid,
-                        onTap: widget.onHowToPlay,
-                        pulse: null,
-                        isPrimary: false,
-                      ),
-                    ),
-
-                    const Spacer(flex: 2),
-
-                    // Gesture quick-reference
-                    _GestureReference(),
-
-                    const SizedBox(height: 20),
-
-                    const Text(
-                      'WEBCAM ACTIVE — BIG BROTHER IS WATCHING  •  OR USE MOUSE',
-                      style: TextStyle(
-                        color: Color(0xFF335533),
-                        fontFamily: 'monospace',
-                        fontSize: 9,
-                        letterSpacing: 2.0,
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-                  ],
+        // Bottom fire gradient
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 200,
+          child: IgnorePointer(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Color(0x88CC3300), Colors.transparent],
                 ),
               ),
             ),
           ),
-        ],
+        ),
+        // Content
+        FadeTransition(
+          opacity: _fadeInCtrl,
+          child: SafeArea(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Big Brother surveillance tag
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: const Color(0xFF44FF44).withValues(alpha: 0.45),
+                        width: 1,
+                      ),
+                      color: const Color(0xFF001100),
+                    ),
+                    child: const Text(
+                      '👁  BIG BROTHER IS WATCHING  👁',
+                      style: TextStyle(
+                        color: Color(0xFF44FF44),
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        letterSpacing: 3.5,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ═══ MAIN TITLE ═══
+                  AnimatedBuilder(
+                    animation: _pulseCtrl,
+                    builder: (context, _) {
+                      final glow = 0.65 + 0.35 * _pulseCtrl.value;
+                      return Column(
+                        children: [
+                          Text(
+                            'PYRO',
+                            style: TextStyle(
+                              color: Palette.fireWhite,
+                              fontFamily: 'monospace',
+                              fontSize: 72,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 16.0,
+                              height: 0.9,
+                              shadows: [
+                                Shadow(
+                                  blurRadius: 30 * glow,
+                                  color: Palette.fireDeep.withValues(
+                                    alpha: 0.9 * glow,
+                                  ),
+                                ),
+                                Shadow(
+                                  blurRadius: 60 * glow,
+                                  color: Palette.fireMid.withValues(
+                                    alpha: 0.5 * glow,
+                                  ),
+                                ),
+                                Shadow(
+                                  blurRadius: 100 * glow,
+                                  color: Palette.fireGold.withValues(
+                                    alpha: 0.3 * glow,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            'MANCER',
+                            style: TextStyle(
+                              color: Palette.fireGold,
+                              fontFamily: 'monospace',
+                              fontSize: 72,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 16.0,
+                              height: 0.9,
+                              shadows: [
+                                Shadow(
+                                  blurRadius: 30 * glow,
+                                  color: Palette.fireDeep.withValues(
+                                    alpha: 0.9 * glow,
+                                  ),
+                                ),
+                                Shadow(
+                                  blurRadius: 80 * glow,
+                                  color: Palette.fireGold.withValues(
+                                    alpha: 0.6 * glow,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Divider line
+                  SizedBox(
+                    width: 320,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Container(
+                          height: 1,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.transparent,
+                                Palette.fireGold,
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          color: const Color(0xFF0A0F0F),
+                          child: const Text(
+                            '✦',
+                            style: TextStyle(
+                              color: Palette.fireGold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  const Text(
+                    '"SNAP YOUR FINGERS. RESIST THEM ALL."',
+                    style: TextStyle(
+                      color: Palette.uiGrey,
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      letterSpacing: 2.0,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Buttons
+                  _gestureWrap(
+                    onTap: widget.onPlayPressed,
+                    child: _MenuButton(
+                      label: '▶   ENTER THE DUNGEON',
+                      color: Palette.fireGold,
+                      onTap: widget.onPlayPressed,
+                      pulse: _pulseCtrl,
+                      isPrimary: true,
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _gestureWrap(
+                        onTap: widget.onStory,
+                        child: _MenuButton(
+                          label: '📜  STORY',
+                          color: const Color(0xFF44FF44),
+                          onTap: widget.onStory,
+                          pulse: null,
+                          isPrimary: false,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      _gestureWrap(
+                        onTap: widget.onHowToPlay,
+                        child: _MenuButton(
+                          label: '?   HOW TO PLAY',
+                          color: Palette.fireMid,
+                          onTap: widget.onHowToPlay,
+                          pulse: null,
+                          isPrimary: false,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Gesture quick-reference
+                  _GestureReference(),
+
+                  const SizedBox(height: 12),
+
+                  const Text(
+                    'WEBCAM ACTIVE — BIG BROTHER IS WATCHING  •  OR USE MOUSE',
+                    style: TextStyle(
+                      color: Color(0xFF335533),
+                      fontFamily: 'monospace',
+                      fontSize: 9,
+                      letterSpacing: 2.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
 
     return Scaffold(

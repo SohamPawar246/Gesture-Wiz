@@ -9,11 +9,13 @@ import '../game/components/enemy.dart';
 class ActionResult {
   final GameAction action;
   final Vector2 handPosition;
+  final double confidence;
   final List<Enemy>? targets;
 
   ActionResult({
     required this.action,
     required this.handPosition,
+    this.confidence = 1.0,
     this.targets,
   });
 }
@@ -72,13 +74,14 @@ class ActionSystem {
           cooldown: 0.0,  // No cooldown — sustained
         ),
         GameAction(
-          name: 'Grab',
+          name: 'Telekinesis',
           gesture: GestureType.pinch,
-          manaCost: 0,
+          manaCost: 5,   // Per-second drain while holding
           effectColor: Color(0xFF88FF44),
           type: ActionType.grab,
-          damage: 0,
+          damage: 1.5,   // DoT per second while held
           cooldown: 0.0,
+          radius: 140.0, // Grab range
         ),
         GameAction(
           name: 'Overwatch Pulse',
@@ -98,7 +101,7 @@ class ActionSystem {
   /// or null if on cooldown / no matching action.
   ///
   /// For sustained actions (shield), returns the action every frame while held.
-  ActionResult? processGesture(GestureType gesture, Vector2 handPosition) {
+  ActionResult? processGesture(GestureType gesture, Vector2 handPosition, {double confidence = 1.0}) {
     if (gesture == GestureType.none) {
       _currentHeldGesture = GestureType.none;
       return null;
@@ -111,7 +114,7 @@ class ActionSystem {
 
     // Sustained actions (shield, grab) fire continuously while held
     if (action.type == ActionType.shield || action.type == ActionType.grab) {
-      return ActionResult(action: action, handPosition: handPosition);
+      return ActionResult(action: action, handPosition: handPosition, confidence: confidence);
     }
 
     // Instant actions check cooldown
@@ -120,7 +123,7 @@ class ActionSystem {
 
     // Fire and set cooldown
     _cooldowns[gesture] = action.cooldown;
-    return ActionResult(action: action, handPosition: handPosition);
+    return ActionResult(action: action, handPosition: handPosition, confidence: confidence);
   }
 
   /// Tick cooldowns. Call once per frame.

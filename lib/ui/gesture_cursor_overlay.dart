@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../game/palette.dart';
 import '../models/gesture_cursor_controller.dart';
@@ -158,8 +159,9 @@ class _CursorPainter extends CustomPainter {
       c,
       pinching ? 10 : 7,
       Paint()
-        ..color = (pinching ? Palette.fireWhite : Palette.fireMid)
-            .withValues(alpha: 0.6 + 0.3 * pulse)
+        ..color = (pinching ? Palette.fireWhite : Palette.fireMid).withValues(
+          alpha: 0.6 + 0.3 * pulse,
+        )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
     );
 
@@ -233,6 +235,7 @@ class _GestureTapTargetState extends State<GestureTapTarget>
   bool _hasFired = false;
   double _cooldown = 0.0;
   Duration? _prevElapsed;
+  late final Ticker _ticker;
 
   // Unique ID to coordinate with the controller's dwell slot
   late final int _myId;
@@ -241,11 +244,12 @@ class _GestureTapTargetState extends State<GestureTapTarget>
   void initState() {
     super.initState();
     _myId = identityHashCode(this);
-    createTicker(_tick).start();
+    _ticker = createTicker(_tick)..start();
   }
 
   @override
   void dispose() {
+    _ticker.dispose();
     widget.controller.endDwell(_myId);
     super.dispose();
   }
@@ -271,7 +275,8 @@ class _GestureTapTargetState extends State<GestureTapTarget>
     final origin = renderBox.localToGlobal(Offset.zero);
     final boxSize = renderBox.size;
 
-    final inside = widget.controller.isVisible &&
+    final inside =
+        widget.controller.isVisible &&
         cursorPx.dx >= origin.dx &&
         cursorPx.dx <= origin.dx + boxSize.width &&
         cursorPx.dy >= origin.dy &&
@@ -313,7 +318,11 @@ class _GestureTapTargetState extends State<GestureTapTarget>
     }
 
     // ── Fire on pinch ─────────────────────────────────────────────────
-    if (inside && widget.controller.pinchJustFired && !_hasFired && _cooldown <= 0 && globalReady) {
+    if (inside &&
+        widget.controller.pinchJustFired &&
+        !_hasFired &&
+        _cooldown <= 0 &&
+        globalReady) {
       _fire(newDwell = 0.0);
     }
 
@@ -346,7 +355,9 @@ class _GestureTapTargetState extends State<GestureTapTarget>
           ? BoxDecoration(
               boxShadow: [
                 BoxShadow(
-                  color: Palette.fireGold.withValues(alpha: 0.18 + 0.25 * _dwell),
+                  color: Palette.fireGold.withValues(
+                    alpha: 0.18 + 0.25 * _dwell,
+                  ),
                   blurRadius: 22,
                   spreadRadius: 2,
                 ),
@@ -364,7 +375,9 @@ class _GestureTapTargetState extends State<GestureTapTarget>
                   duration: const Duration(milliseconds: 80),
                   decoration: BoxDecoration(
                     border: Border.all(
-                      color: Palette.fireGold.withValues(alpha: 0.35 + 0.45 * _dwell),
+                      color: Palette.fireGold.withValues(
+                        alpha: 0.35 + 0.45 * _dwell,
+                      ),
                       width: 1.5,
                     ),
                   ),

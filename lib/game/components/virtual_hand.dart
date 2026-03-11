@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../systems/hand_tracking/landmark_model.dart';
 import '../../systems/hand_tracking/coordinate_mapper.dart';
+import '../../systems/gesture/gesture_type.dart';
 import '../palette.dart';
 
 /// Renders the player's tracked hand as a realistic human-ish hand
@@ -12,6 +13,8 @@ class VirtualHand extends PositionComponent {
   final Map<int, CircleComponent> _jointComponents = {};
 
   Color? activeGlowColor;
+  double gestureConfidence = 0.0;
+  GestureType activeGestureType = GestureType.none;
   bool _isTracked = false;
   final List<Offset> _trailPoints = [];
   final int _maxTrailLen = 14;
@@ -81,7 +84,7 @@ class VirtualHand extends PositionComponent {
       if (dt > 0 && _jointComponents[i]!.position != Vector2.zero()) {
         _jointComponents[i]!.position.lerp(
           targetScreenPosition,
-          (dt * 28.0).clamp(0.0, 1.0),
+          (dt * 45.0).clamp(0.0, 1.0),
         );
       } else {
         _jointComponents[i]!.position = targetScreenPosition;
@@ -219,6 +222,48 @@ class VirtualHand extends PositionComponent {
           ..color = e.color.withValues(alpha: alpha * 0.55)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
       );
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // LAYER 9: GESTURE CHARGE RING
+    // ══════════════════════════════════════════════════════════════
+    if (gestureConfidence > 0.3 && activeGestureType != GestureType.none &&
+        activeGestureType != GestureType.openPalm) {
+      final chargeProgress = ((gestureConfidence - 0.3) / 0.7).clamp(0.0, 1.0);
+      final ringRadius = 35.0 + chargeProgress * 15.0;
+      final ringAlpha = chargeProgress * 0.6;
+      final ringColor = activeGlowColor ?? Palette.fireGold;
+
+      // Spinning arc that fills as confidence approaches 1.0
+      canvas.drawArc(
+        Rect.fromCircle(center: palmCenter, radius: ringRadius),
+        _flameTime * 3.0,
+        chargeProgress * 2 * pi,
+        false,
+        Paint()
+          ..color = ringColor.withValues(alpha: ringAlpha)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0),
+      );
+
+      // Inner bright arc (thinner, brighter)
+      if (chargeProgress > 0.6) {
+        final innerAlpha = ((chargeProgress - 0.6) / 0.4) * 0.8;
+        canvas.drawArc(
+          Rect.fromCircle(center: palmCenter, radius: ringRadius - 4.0),
+          _flameTime * -4.5,
+          chargeProgress * 1.8 * pi,
+          false,
+          Paint()
+            ..color = Colors.white.withValues(alpha: innerAlpha)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5
+            ..strokeCap = StrokeCap.round
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0),
+        );
+      }
     }
   }
 

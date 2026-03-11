@@ -27,13 +27,20 @@ import 'components/death_pop.dart';
 import 'components/impact_frame.dart';
 import 'components/texel_splat.dart';
 import '../systems/audio_manager.dart';
+import '../systems/surveillance_system.dart';
 
-class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, SecondaryTapCallbacks {
+class FpvGame extends FlameGame
+    with MouseMovementDetector, TapCallbacks, SecondaryTapCallbacks {
   late CoordinateMapper _mapper;
   final Map<int, VirtualHand> _hands = {};
   late DungeonBackground _background;
   late ScreenShake _screenShake;
   late DamageFlash _damageFlash;
+
+  // Big Brother surveillance system
+  final SurveillanceSystem _surveillance = SurveillanceSystem();
+  Landmark? _prevWristForSurveillance;
+  bool _bbGameOverFired = false;
 
   // Active enemies
   final List<Enemy> _enemies = [];
@@ -50,6 +57,12 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
   bool _shieldActive = false;
   Vector2 _shieldHandPos = Vector2.zero();
 
+  // Telekinesis grab-throw state
+  Enemy? _grabbedEnemy;
+  Vector2 _grabHandPos = Vector2.zero();
+  Vector2 _prevGrabHandPos = Vector2.zero();
+  double _grabDotTimer = 0;
+
   // Gesture Subsystem — per hand
   final RuleBasedRecognizer _gestureRecognizer = RuleBasedRecognizer();
   final GestureStateMachine _stateMachine0 = GestureStateMachine();
@@ -58,6 +71,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
 
   // Game state callbacks
   final void Function()? onGameOver;
+  final void Function()? onBigBrotherGameOver;
   final void Function(int wave)? onWaveChanged;
   final void Function()? onVictory;
 
@@ -87,6 +101,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
   FpvGame({
     this.onGestureDetected,
     this.onGameOver,
+    this.onBigBrotherGameOver,
     this.onWaveChanged,
     this.onVictory,
     required this.playerStats,
@@ -133,23 +148,27 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
         AudioManager.playSfx('wave.wav', volume: 0.6);
         playerStats.setWave(wave);
         onWaveChanged?.call(wave);
-        add(FloatingText(
-          position: Vector2(size.x / 2, size.y / 2),
-          text: 'CHAMBER $wave',
-          color: Palette.fireGold,
-          fontSize: 36,
-          duration: 2.0,
-        ));
+        add(
+          FloatingText(
+            position: Vector2(size.x / 2, size.y / 2),
+            text: 'CHAMBER $wave',
+            color: Palette.fireGold,
+            fontSize: 36,
+            duration: 2.0,
+          ),
+        );
       },
       onWaveComplete: (wave) {
         AudioManager.playSfx('wave.wav', volume: 0.6);
-        add(FloatingText(
-          position: Vector2(size.x / 2, size.y / 2),
-          text: 'CHAMBER $wave CLEAR',
-          color: Palette.fireGold,
-          fontSize: 28,
-          duration: 2.0,
-        ));
+        add(
+          FloatingText(
+            position: Vector2(size.x / 2, size.y / 2),
+            text: 'CHAMBER $wave CLEAR',
+            color: Palette.fireGold,
+            fontSize: 28,
+            duration: 2.0,
+          ),
+        );
       },
       onAllWavesClear: () {
         onVictory?.call();
@@ -157,13 +176,15 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       onBossSpawn: () {
         AudioManager.playSfx('explode.wav', volume: 0.8);
         _screenShake.trigger(intensity: 20.0, decay: 3.0);
-        add(FloatingText(
-          position: Vector2(size.x / 2, size.y * 0.35),
-          text: 'THE REBEL APPROACHES',
-          color: Palette.impactRed,
-          fontSize: 32,
-          duration: 3.0,
-        ));
+        add(
+          FloatingText(
+            position: Vector2(size.x / 2, size.y * 0.35),
+            text: 'THE REBEL APPROACHES',
+            color: Palette.impactRed,
+            fontSize: 32,
+            duration: 3.0,
+          ),
+        );
       },
     );
 
@@ -177,6 +198,11 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
   }
 
   void restartGame() {
+    // Reset surveillance FIRST to prevent any stale triggered state
+    _surveillance.reset();
+    _prevWristForSurveillance = null;
+    _bbGameOverFired = false;
+
     for (final enemy in _enemies) {
       enemy.removeFromParent();
     }
@@ -191,6 +217,10 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     _shieldTimer = 0;
     _shieldActive = false;
     _shieldHandPos = Vector2.zero();
+    _grabbedEnemy = null;
+    _grabHandPos = Vector2.zero();
+    _prevGrabHandPos = Vector2.zero();
+    _grabDotTimer = 0;
     _gameTime = 0;
     _gameRunning = true;
   }
@@ -220,9 +250,12 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     // --- Hand tracking (supports 2 hands) ---
     // Poll WebTrackingService if on web (it reads from JS each frame)
     if (trackingService is dynamic && trackingService != null) {
-      try { (trackingService as dynamic).poll(); } catch (_) {}
+      try {
+        (trackingService as dynamic).poll();
+      } catch (_) {}
     }
-    final bool usingTracking = trackingService != null && trackingService!.isConnected;
+    final bool usingTracking =
+        trackingService != null && trackingService!.isConnected;
 
     // --- Face tracking for camera pan/parallax ---
     // Face detection runs independently of hand tracking — apply it even when
@@ -237,6 +270,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       _background.parallaxY += (0.5 - _background.parallaxY) * dt * 3.0;
     }
 
+    bool hand0Tracked = false;
     for (int handId = 0; handId < 2; handId++) {
       final List<Landmark> landmarks;
       if (usingTracking && trackingService!.getHandLandmarks(handId) != null) {
@@ -251,34 +285,72 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       _hands[handId]?.activeGlowColor = activeColor;
       _hands[handId]?.updateLandmarks(landmarks, _mapper, dt: dt);
 
+      // --- Surveillance: track wrist velocity for primary hand ---
+      if (handId == 0 && landmarks.isNotEmpty) {
+        hand0Tracked = true;
+        final wrist = landmarks[0];
+        double vSq = 0.0;
+        if (_prevWristForSurveillance != null) {
+          final dx = wrist.x - _prevWristForSurveillance!.x;
+          final dy = wrist.y - _prevWristForSurveillance!.y;
+          vSq = dx * dx + dy * dy;
+        }
+        _prevWristForSurveillance = wrist;
+        _surveillance.update(dt, wristVelocitySq: vSq);
+      }
+
       // --- Gesture recognition per hand ---
-      final rawGesture = _gestureRecognizer.recognize(landmarks);
+      // Use raw landmarks for recognition (avoids double-smoothing delay)
+      List<Landmark>? rawLandmarks;
+      if (usingTracking) {
+        try {
+          rawLandmarks = (trackingService as dynamic).getRawHandLandmarks(handId);
+        } catch (_) {}
+      }
+      final recogLandmarks = rawLandmarks ?? landmarks;
+
+      final rawGesture = _gestureRecognizer.recognize(recogLandmarks);
       final stateMachine = handId == 0 ? _stateMachine0 : _stateMachine1;
       final stableGesture = stateMachine.processFrame(
         rawGesture,
-        landmarks: landmarks,
         dt: dt,
       );
 
-      if (stableGesture != GestureType.none) {
-        final handPos = landmarks.isNotEmpty
+      final handPos = landmarks.isNotEmpty
           ? _mapper.mapLandmarkToScreen(landmarks[0])
           : Vector2(size.x / 2, size.y / 2);
 
-        final result = _actionSystem.processGesture(stableGesture, handPos);
+      // Detect grab release (gesture transitioned away from pinch)
+      if (handId == 0 && stableGesture != GestureType.pinch && _grabbedEnemy != null) {
+        _releaseGrab(handPos);
+      }
+
+      if (stableGesture != GestureType.none) {
+        final result = _actionSystem.processGesture(
+          stableGesture, handPos,
+          confidence: rawGesture.confidence,
+        );
         if (result != null) {
           _executeAction(result.action, handPos, dt);
           activeColor = result.action.effectColor;
         }
       }
 
-      // Update hand glow with active action color
+      // Update hand visuals with confidence and gesture info
       _hands[handId]?.activeGlowColor = activeColor;
+      _hands[handId]?.gestureConfidence = rawGesture.confidence;
+      _hands[handId]?.activeGestureType = rawGesture.type;
 
       // Gesture callback (from primary hand only)
       if (handId == 0 && onGestureDetected != null) {
         onGestureDetected!(stableGesture);
       }
+    }
+
+    // Tick surveillance decay if primary hand was not tracked this frame
+    if (!hand0Tracked) {
+      _prevWristForSurveillance = null;
+      _surveillance.update(dt);
     }
 
     _actionSystem.update(dt);
@@ -302,33 +374,40 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
 
       if (enemy.reachedPlayer) {
         // Shield only blocks when the open-palm hand is physically near the enemy.
-        final shieldBlocks = (_shieldTimer > 0 || _shieldActive) &&
+        final shieldBlocks =
+            (_shieldTimer > 0 || _shieldActive) &&
             _shieldHandPos.distanceTo(enemy.position) < size.x * 0.28;
         if (shieldBlocks) {
           AudioManager.playSfx('shield.wav', volume: 0.5);
           enemy.takeDamage(999);
-          add(FloatingText(
-            position: enemy.position.clone(),
-            text: 'BLOCKED',
-            color: Colors.cyanAccent,
-            fontSize: 18,
-          ));
+          add(
+            FloatingText(
+              position: enemy.position.clone(),
+              text: 'BLOCKED',
+              color: Colors.cyanAccent,
+              fontSize: 18,
+            ),
+          );
         } else {
           AudioManager.playSfx('hit.wav', volume: 0.7);
           playerStats.takeDamage(enemy.data.damage);
           _screenShake.trigger(intensity: 15.0);
           _damageFlash.trigger();
-          add(FloatingText(
-            position: Vector2(size.x / 2, size.y * 0.7),
-            text: '-${enemy.data.damage.toInt()} HP',
-            color: Palette.impactRed,
-            fontSize: 24,
-          ));
-          
-          add(TexelSplat(
-            position: Vector2(size.x / 2, size.y), 
-            baseColor: Palette.impactRed,
-          )..priority = 100);
+          add(
+            FloatingText(
+              position: Vector2(size.x / 2, size.y * 0.7),
+              text: '-${enemy.data.damage.toInt()} HP',
+              color: Palette.impactRed,
+              fontSize: 24,
+            ),
+          );
+
+          add(
+            TexelSplat(
+              position: Vector2(size.x / 2, size.y),
+              baseColor: Palette.impactRed,
+            )..priority = 100,
+          );
 
           enemy.takeDamage(999);
         }
@@ -345,6 +424,13 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       onGameOver?.call();
     }
 
+    // --- Big Brother detection game over ---
+    if (_surveillance.triggered && !_bbGameOverFired) {
+      _bbGameOverFired = true;
+      _gameRunning = false;
+      onBigBrotherGameOver?.call();
+    }
+
     // --- Combo multiplier decay ---
     if (_gameTime - _lastKillTime > _comboWindow && _comboMultiplier > 1) {
       _comboMultiplier = 1;
@@ -353,6 +439,11 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
 
   /// Execute a game action based on its type
   void _executeAction(GameAction action, Vector2 position, double dt) {
+    // Notify surveillance of instant action fires (not sustained shield/grab)
+    if (action.type != ActionType.shield && action.type != ActionType.grab) {
+      _surveillance.onActionFired();
+    }
+
     switch (action.type) {
       case ActionType.attack:
         _executeAttack(action, position);
@@ -364,7 +455,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
         _executeShield(action, position, dt);
         break;
       case ActionType.grab:
-        _executeGrab(action, position);
+        _executeGrab(action, position, dt);
         break;
       case ActionType.ultimate:
         _executeUltimate(action, position);
@@ -377,20 +468,24 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     playerStats.consumeMana(action.manaCost);
 
     AudioManager.playSfx('fireball.wav', volume: 0.5);
-    
-    final target = _findNearestEnemy();
-    add(Projectile(
-      startPosition: position,
-      action: action,
-      target: target,
-      onHit: (enemy, a) => _onProjectileHit(enemy, a),
-    ));
 
-    add(SpellEffect(
-      position: position.clone(),
-      effectColor: action.effectColor,
-      spellName: action.name,
-    ));
+    final target = _findNearestEnemy();
+    add(
+      Projectile(
+        startPosition: position,
+        action: action,
+        target: target,
+        onHit: (enemy, a) => _onProjectileHit(enemy, a),
+      ),
+    );
+
+    add(
+      SpellEffect(
+        position: position.clone(),
+        effectColor: action.effectColor,
+        spellName: action.name,
+      ),
+    );
 
     _screenShake.trigger(intensity: 6.0);
     playerStats.addXp(5);
@@ -402,10 +497,7 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
 
     AudioManager.playSfx('explode.wav', volume: 0.5);
 
-    add(Projectile(
-      startPosition: position,
-      action: action,
-    ));
+    add(Projectile(startPosition: position, action: action));
 
     // Damage enemies near the fist position
     for (final enemy in _enemies) {
@@ -413,21 +505,25 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
         final dist = (enemy.position - position).length;
         if (dist < action.radius) {
           enemy.takeDamage(action.damage);
-          add(FloatingText(
-            position: enemy.position.clone(),
-            text: 'PUSHED',
-            color: action.effectColor,
-            fontSize: 16,
-          ));
+          add(
+            FloatingText(
+              position: enemy.position.clone(),
+              text: 'PUSHED',
+              color: action.effectColor,
+              fontSize: 16,
+            ),
+          );
         }
       }
     }
 
-    add(SpellEffect(
-      position: position.clone(),
-      effectColor: action.effectColor,
-      spellName: action.name,
-    ));
+    add(
+      SpellEffect(
+        position: position.clone(),
+        effectColor: action.effectColor,
+        spellName: action.name,
+      ),
+    );
 
     _screenShake.trigger(intensity: 12.0);
     playerStats.addXp(8);
@@ -444,25 +540,113 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     _shieldTimer = 0.3; // Lingers briefly after release
   }
 
-  void _executeGrab(GameAction action, Vector2 position) {
-    // Grab logic — will be expanded in Phase 2 with interactables
-    // For now, check if pinch position is near an enemy (grab-throw preview)
-    for (final enemy in _enemies) {
-      if (!enemy.isDead) {
-        final dist = (enemy.position - position).length;
-        if (dist < 80) {
-          // "Grabbed" enemy — deal minor damage
-          enemy.takeDamage(0.2);
-          add(FloatingText(
-            position: enemy.position.clone(),
-            text: 'GRIP',
-            color: action.effectColor,
-            fontSize: 14,
-          ));
-          break; // Only grab one
+  void _executeGrab(GameAction action, Vector2 position, double dt) {
+    // Sustained: drain mana per second while holding
+    final drain = action.manaCost * dt;
+    if (!playerStats.canCast(drain)) {
+      _releaseGrab(position);
+      return;
+    }
+    playerStats.consumeMana(drain);
+
+    _prevGrabHandPos = _grabHandPos.clone();
+    _grabHandPos = position.clone();
+
+    // Try to grab if not already holding
+    if (_grabbedEnemy == null || _grabbedEnemy!.isDead) {
+      _grabbedEnemy = null;
+      for (final enemy in _enemies) {
+        if (!enemy.isDead && !enemy.isGrabbed) {
+          final dist = (enemy.position - position).length;
+          if (dist < action.radius) {
+            _grabbedEnemy = enemy;
+            enemy.isGrabbed = true;
+            _grabDotTimer = 0;
+            AudioManager.playSfx('shield.wav', volume: 0.3);
+            add(FloatingText(
+              position: enemy.position.clone(),
+              text: 'GRABBED',
+              color: action.effectColor,
+              fontSize: 18,
+            ));
+            break;
+          }
         }
       }
     }
+
+    // Drag grabbed enemy to hand position
+    if (_grabbedEnemy != null && !_grabbedEnemy!.isDead) {
+      _grabbedEnemy!.position.lerp(position, (dt * 18.0).clamp(0.0, 1.0));
+
+      // Damage over time (action.damage per second, ticked every 0.5s)
+      _grabDotTimer += dt;
+      if (_grabDotTimer >= 0.5) {
+        _grabDotTimer = 0;
+        _grabbedEnemy!.takeDamage(action.damage * 0.5);
+        add(FloatingText(
+          position: _grabbedEnemy!.position.clone(),
+          text: 'GRIP',
+          color: action.effectColor,
+          fontSize: 14,
+        ));
+      }
+    }
+  }
+
+  void _releaseGrab(Vector2 releasePosition) {
+    if (_grabbedEnemy == null || _grabbedEnemy!.isDead) {
+      if (_grabbedEnemy != null) _grabbedEnemy!.isGrabbed = false;
+      _grabbedEnemy = null;
+      return;
+    }
+
+    _grabbedEnemy!.isGrabbed = false;
+
+    // Compute throw velocity from hand movement delta
+    final throwDir = _grabHandPos - _prevGrabHandPos;
+    final throwSpeed = throwDir.length;
+
+    if (throwSpeed > 2.0) {
+      // Throw the enemy into the crowd
+      AudioManager.playSfx('fireball.wav', volume: 0.4);
+      _screenShake.trigger(intensity: 8.0);
+
+      final throwNorm = throwDir.normalized();
+      // Damage enemies in the throw path
+      for (final other in _enemies) {
+        if (other == _grabbedEnemy || other.isDead) continue;
+        final toOther = other.position - _grabbedEnemy!.position;
+        final dot = toOther.dot(throwNorm);
+        if (dot > 0 && dot < 300) {
+          final perpDist = (toOther - throwNorm * dot).length;
+          if (perpDist < 80) {
+            other.takeDamage(2.5);
+            add(FloatingText(
+              position: other.position.clone(),
+              text: 'THROWN',
+              color: const Color(0xFF88FF44),
+              fontSize: 20,
+            ));
+          }
+        }
+      }
+
+      // Kill the thrown enemy
+      _grabbedEnemy!.takeDamage(999);
+      add(SpellEffect(
+        position: _grabbedEnemy!.position.clone(),
+        effectColor: const Color(0xFF88FF44),
+        spellName: 'THROW',
+      ));
+      playerStats.addXp(12);
+    } else {
+      // Gentle release — minor damage
+      _grabbedEnemy!.takeDamage(0.5);
+    }
+
+    _grabbedEnemy = null;
+    _grabDotTimer = 0;
   }
 
   void _executeUltimate(GameAction action, Vector2 position) {
@@ -471,10 +655,12 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
 
     AudioManager.playSfx('explode.wav', volume: 0.8);
 
-    add(Projectile(
-      startPosition: Vector2(size.x / 2, size.y / 2),
-      action: action,
-    ));
+    add(
+      Projectile(
+        startPosition: Vector2(size.x / 2, size.y / 2),
+        action: action,
+      ),
+    );
 
     for (final enemy in List.of(_enemies)) {
       if (!enemy.isDead) {
@@ -482,12 +668,14 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       }
     }
 
-    add(FloatingText(
-      position: Vector2(size.x / 2, size.y * 0.3),
-      text: 'OVERWATCH PULSE',
-      color: action.effectColor,
-      fontSize: 30,
-    ));
+    add(
+      FloatingText(
+        position: Vector2(size.x / 2, size.y * 0.3),
+        text: 'OVERWATCH PULSE',
+        color: action.effectColor,
+        fontSize: 30,
+      ),
+    );
     add(ImpactFrame()..priority = 100);
     _screenShake.trigger(intensity: 20.0);
     playerStats.addXp(20);
@@ -504,16 +692,20 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     enemy.removeFromParent();
 
     AudioManager.playSfx('pop.wav', volume: 0.4);
-    add(DeathPop(
-      position: enemy.position.clone(),
-      primaryColor: enemy.data.primaryColor,
-      popScale: enemy.data.kind == EnemyKind.boss ? 2.0 : 1.0,
-    ));
+    add(
+      DeathPop(
+        position: enemy.position.clone(),
+        primaryColor: enemy.data.primaryColor,
+        popScale: enemy.data.kind == EnemyKind.boss ? 2.0 : 1.0,
+      ),
+    );
 
-    add(TexelSplat(
-      position: enemy.position.clone(),
-      baseColor: enemy.data.primaryColor,
-    )..priority = 100);
+    add(
+      TexelSplat(
+        position: enemy.position.clone(),
+        baseColor: enemy.data.primaryColor,
+      )..priority = 100,
+    );
 
     // Score with combo multiplier
     final now = _gameTime;
@@ -532,20 +724,24 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     playerStats.addKill();
     playerStats.addXp(10 * _comboMultiplier);
 
-    add(FloatingText(
-      position: enemy.position.clone(),
-      text: '+$points',
-      color: Palette.fireGold,
-      fontSize: 18,
-    ));
+    add(
+      FloatingText(
+        position: enemy.position.clone(),
+        text: '+$points',
+        color: Palette.fireGold,
+        fontSize: 18,
+      ),
+    );
 
     if (_comboMultiplier > 1) {
-      add(FloatingText(
-        position: enemy.position.clone() + Vector2(0, -30),
-        text: 'x$_comboMultiplier',
-        color: Palette.fireBright,
-        fontSize: 22,
-      ));
+      add(
+        FloatingText(
+          position: enemy.position.clone() + Vector2(0, -30),
+          text: 'x$_comboMultiplier',
+          color: Palette.fireBright,
+          fontSize: 22,
+        ),
+      );
     }
 
     _announceKillStreak();
@@ -586,13 +782,15 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
     }
 
     if (text != null) {
-      add(FloatingText(
-        position: Vector2(size.x / 2, size.y * 0.3),
-        text: text,
-        color: color,
-        fontSize: 40,
-        duration: 2.0,
-      ));
+      add(
+        FloatingText(
+          position: Vector2(size.x / 2, size.y * 0.3),
+          text: text,
+          color: color,
+          fontSize: 40,
+          duration: 2.0,
+        ),
+      );
       _screenShake.trigger(intensity: shakeIntensity);
     }
   }
@@ -600,7 +798,8 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
   void _onProjectileHit(Enemy enemy, GameAction action) {
     enemy.takeDamage(action.damage);
 
-    if (action.type == ActionType.attack || action.type == ActionType.ultimate) {
+    if (action.type == ActionType.attack ||
+        action.type == ActionType.ultimate) {
       add(ImpactFrame()..priority = 100);
     }
   }
@@ -634,13 +833,16 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
   void onTapCancel(TapCancelEvent event) => _isMousePressed = false;
 
   @override
-  void onSecondaryTapDown(SecondaryTapDownEvent event) => _isRightMousePressed = true;
+  void onSecondaryTapDown(SecondaryTapDownEvent event) =>
+      _isRightMousePressed = true;
 
   @override
-  void onSecondaryTapUp(SecondaryTapUpEvent event) => _isRightMousePressed = false;
+  void onSecondaryTapUp(SecondaryTapUpEvent event) =>
+      _isRightMousePressed = false;
 
   @override
-  void onSecondaryTapCancel(SecondaryTapCancelEvent event) => _isRightMousePressed = false;
+  void onSecondaryTapCancel(SecondaryTapCancelEvent event) =>
+      _isRightMousePressed = false;
 
   List<Landmark> _generateMouseDrivenLandmarks() {
     final screenWidth = size.x;
@@ -654,23 +856,75 @@ class FpvGame extends FlameGame with MouseMovementDetector, TapCallbacks, Second
       Landmark(x: normX - 0.05, y: normY + 0.08, z: 0),
       Landmark(x: normX - 0.08, y: normY + 0.05, z: 0),
       Landmark(x: normX - 0.10, y: normY + 0.02, z: 0),
-      Landmark(x: normX - 0.12, y: normY - (_isMousePressed ? 0.02 : 0.01), z: 0),
+      Landmark(
+        x: normX - 0.12,
+        y: normY - (_isMousePressed ? 0.02 : 0.01),
+        z: 0,
+      ),
       Landmark(x: normX - 0.03, y: normY, z: 0),
-      Landmark(x: normX - 0.04, y: normY - (_isRightMousePressed ? 0.15 : fingerExt) * 0.5, z: 0),
-      Landmark(x: normX - 0.045, y: normY - (_isRightMousePressed ? 0.15 : fingerExt) * 0.8, z: 0),
-      Landmark(x: normX - 0.05, y: normY - (_isRightMousePressed ? 0.15 : fingerExt), z: 0),
+      Landmark(
+        x: normX - 0.04,
+        y: normY - (_isRightMousePressed ? 0.15 : fingerExt) * 0.5,
+        z: 0,
+      ),
+      Landmark(
+        x: normX - 0.045,
+        y: normY - (_isRightMousePressed ? 0.15 : fingerExt) * 0.8,
+        z: 0,
+      ),
+      Landmark(
+        x: normX - 0.05,
+        y: normY - (_isRightMousePressed ? 0.15 : fingerExt),
+        z: 0,
+      ),
       Landmark(x: normX, y: normY - 0.01, z: 0),
-      Landmark(x: normX, y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.5 - 0.01, z: 0),
-      Landmark(x: normX, y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.8 - 0.01, z: 0),
-      Landmark(x: normX, y: normY - (_isRightMousePressed ? 0.02 : fingerExt) - 0.02, z: 0),
+      Landmark(
+        x: normX,
+        y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.5 - 0.01,
+        z: 0,
+      ),
+      Landmark(
+        x: normX,
+        y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.8 - 0.01,
+        z: 0,
+      ),
+      Landmark(
+        x: normX,
+        y: normY - (_isRightMousePressed ? 0.02 : fingerExt) - 0.02,
+        z: 0,
+      ),
       Landmark(x: normX + 0.03, y: normY, z: 0),
-      Landmark(x: normX + 0.04, y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.5, z: 0),
-      Landmark(x: normX + 0.045, y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.8, z: 0),
-      Landmark(x: normX + 0.05, y: normY - (_isRightMousePressed ? 0.02 : fingerExt), z: 0),
+      Landmark(
+        x: normX + 0.04,
+        y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.5,
+        z: 0,
+      ),
+      Landmark(
+        x: normX + 0.045,
+        y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.8,
+        z: 0,
+      ),
+      Landmark(
+        x: normX + 0.05,
+        y: normY - (_isRightMousePressed ? 0.02 : fingerExt),
+        z: 0,
+      ),
       Landmark(x: normX + 0.06, y: normY + 0.02, z: 0),
-      Landmark(x: normX + 0.07, y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.3, z: 0),
-      Landmark(x: normX + 0.08, y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.5, z: 0),
-      Landmark(x: normX + 0.09, y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.7, z: 0),
+      Landmark(
+        x: normX + 0.07,
+        y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.3,
+        z: 0,
+      ),
+      Landmark(
+        x: normX + 0.08,
+        y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.5,
+        z: 0,
+      ),
+      Landmark(
+        x: normX + 0.09,
+        y: normY - (_isRightMousePressed ? 0.02 : fingerExt) * 0.7,
+        z: 0,
+      ),
     ];
   }
 }

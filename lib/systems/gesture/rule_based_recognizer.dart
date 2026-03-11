@@ -4,17 +4,30 @@ import '../hand_tracking/landmark_model.dart';
 import 'gesture_recognizer.dart';
 import 'gesture_type.dart';
 
-/// Gesture recognition with tuned thresholds for THE EYE's direct-action system.
+/// Gesture recognition with hysteresis thresholds and confidence scoring.
 ///
 /// Key design principles:
-///   - Pinch must NOT bleed from fist: require other fingers to be partially open
-///   - Fist requires ALL 4 fingers curled AND tips close to palm
-///   - OpenPalm is the default relaxed state — easy to enter and sustain
-///   - Point and VSign have strict shape requirements to avoid false triggers
+///   - Hysteresis eliminates oscillation: enter thresholds are strict,
+///     sustain thresholds are relaxed — once a gesture starts, it's sticky.
+///   - Confidence scoring lets downstream systems (state machine, visuals)
+///     know how definitively the hand matches the gesture shape.
+///   - Priority: openPalm > pinch > fist > point > vSign > none
 class RuleBasedRecognizer implements GestureRecognizer {
+  // --- Hysteresis thresholds ---
+  // Enter thresholds (strict: must cross these to START a gesture)
+  static const double _openEnter = 0.16;
+  static const double _curlEnter = 0.06;
+  // Sustain thresholds (relaxed: once in a gesture, easier to STAY)
+  static const double _openSustain = 0.10;
+  static const double _curlSustain = 0.12;
+
+  // Track which fingers were classified as open/curled last frame
+  final List<bool> _prevOpen = [false, false, false, false];   // index, middle, ring, pinky
+  final List<bool> _prevCurled = [false, false, false, false];
+
   @override
-  GestureType recognize(List<Landmark> landmarks) {
-    if (landmarks.length != 21) return GestureType.none;
+  GestureResult recognize(List<Landmark> landmarks) {
+    if (landmarks.length != 21) return GestureResult.none;
 
     final wrist = landmarks[0];
 
@@ -45,61 +58,71 @@ class RuleBasedRecognizer implements GestureRecognizer {
 
     // --- Palm size for relative scaling ---
     final double palmSize = _distance(wrist, middleMcp);
-    if (palmSize < 0.01) return GestureType.none;
+    if (palmSize < 0.01) return GestureResult.none;
 
     // ====================================================================
-    // FINGER EXTENSION DETECTION
+    // FINGER EXTENSION RATIOS
     // ====================================================================
-    final double indexRatio  = (_distance(indexTip, wrist)  - _distance(indexPip,  wrist)) / palmSize;
-    final double middleRatio = (_distance(middleTip, wrist) - _distance(middlePip, wrist)) / palmSize;
-    final double ringRatio   = (_distance(ringTip, wrist)   - _distance(ringPip,   wrist)) / palmSize;
-    final double pinkyRatio  = (_distance(pinkyTip, wrist)  - _distance(pinkyPip,  wrist)) / palmSize;
+    final ratios = [
+      (_distance(indexTip, wrist)  - _distance(indexPip,  wrist)) / palmSize,
+      (_distance(middleTip, wrist) - _distance(middlePip, wrist)) / palmSize,
+      (_distance(ringTip, wrist)   - _distance(ringPip,   wrist)) / palmSize,
+      (_distance(pinkyTip, wrist)  - _distance(pinkyPip,  wrist)) / palmSize,
+    ];
 
     // Straightness check (1.05x tolerance for camera angle variation)
-    final bool indexStraight  = _distance(indexTip,  indexMcp)  > _distance(indexDip,  indexMcp)  * 1.05;
-    final bool middleStraight = _distance(middleTip, middleMcp) > _distance(middleDip, middleMcp) * 1.05;
-    final bool ringStraight   = _distance(ringTip,   ringMcp)   > _distance(ringDip,   ringMcp)   * 1.05;
-    final bool pinkyStraight  = _distance(pinkyTip,  pinkyMcp)  > _distance(pinkyDip,  pinkyMcp)  * 1.05;
+    final straight = [
+      _distance(indexTip,  indexMcp)  > _distance(indexDip,  indexMcp)  * 1.05,
+      _distance(middleTip, middleMcp) > _distance(middleDip, middleMcp) * 1.05,
+      _distance(ringTip,   ringMcp)   > _distance(ringDip,   ringMcp)   * 1.05,
+      _distance(pinkyTip,  pinkyMcp)  > _distance(pinkyDip,  pinkyMcp)  * 1.05,
+    ];
 
-    const double openThreshold = 0.13;
-    const double curlThreshold = 0.10;
+    // ====================================================================
+    // HYSTERESIS-BASED CLASSIFICATION
+    // ====================================================================
+    final isOpen = List<bool>.filled(4, false);
+    final isCurled = List<bool>.filled(4, false);
 
-    final bool isIndexOpen   = indexRatio  > openThreshold && indexStraight;
-    final bool isMiddleOpen  = middleRatio > openThreshold && middleStraight;
-    final bool isRingOpen    = ringRatio   > openThreshold && ringStraight;
-    final bool isPinkyOpen   = pinkyRatio  > openThreshold && pinkyStraight;
+    for (int i = 0; i < 4; i++) {
+      // Use sustain (relaxed) threshold if finger was already in that state
+      final openThresh = _prevOpen[i] ? _openSustain : _openEnter;
+      final curlThresh = _prevCurled[i] ? _curlSustain : _curlEnter;
 
-    final bool isIndexCurled  = indexRatio  < curlThreshold || !indexStraight;
-    final bool isMiddleCurled = middleRatio < curlThreshold || !middleStraight;
-    final bool isRingCurled   = ringRatio   < curlThreshold || !ringStraight;
-    final bool isPinkyCurled  = pinkyRatio  < curlThreshold || !pinkyStraight;
+      isOpen[i] = ratios[i] > openThresh && straight[i];
+      isCurled[i] = ratios[i] < curlThresh || !straight[i];
+    }
 
-    final int openCount   = [isIndexOpen,   isMiddleOpen,  isRingOpen,   isPinkyOpen].where((f) => f).length;
-    final int curledCount = [isIndexCurled, isMiddleCurled, isRingCurled, isPinkyCurled].where((f) => f).length;
+    // Update previous state for next frame
+    for (int i = 0; i < 4; i++) {
+      _prevOpen[i] = isOpen[i];
+      _prevCurled[i] = isCurled[i];
+    }
+
+    final int openCount = isOpen.where((f) => f).length;
+    final int curledCount = isCurled.where((f) => f).length;
 
     // ====================================================================
     // GESTURE CLASSIFICATION — strict priority ordering
     // ====================================================================
 
     // --- OPEN PALM (highest priority — it's the default/resting state) ---
-    // Must have all 4 fingers clearly extended. Check FIRST so it takes
-    // priority over partial matches.
     if (openCount >= 4) {
-      return GestureType.openPalm;
+      final confidence = _openPalmConfidence(ratios, straight);
+      return _commit(GestureType.openPalm, confidence);
     }
 
     // --- PINCH: Thumb + Index very close, BUT other fingers NOT all curled ---
-    // This is the key fix: if curledCount >= 3 AND thumb-index are close,
-    // it's probably a fist, not a pinch. Real pinch = thumb touches index
-    // while middle/ring/pinky are relaxed (not tightly curled).
     final double thumbIndexDist  = _distance(thumbTip, indexTip);
     final double thumbMiddleDist = _distance(thumbTip, middleTip);
 
     if (thumbIndexDist < palmSize * 0.18 || thumbMiddleDist < palmSize * 0.22) {
-      // Anti-fist guard: at least 2 of (middle, ring, pinky) should NOT be curled
-      final int othersCurled = [isMiddleCurled, isRingCurled, isPinkyCurled].where((f) => f).length;
+      final int othersCurled = [isCurled[1], isCurled[2], isCurled[3]].where((f) => f).length;
       if (othersCurled <= 1) {
-        return GestureType.pinch;
+        // Confidence based on how close the pinch is, scaled by palm
+        final pinchDist = min(thumbIndexDist, thumbMiddleDist);
+        final pinchConf = (1.0 - (pinchDist / (palmSize * 0.22))).clamp(0.0, 1.0);
+        return _commit(GestureType.pinch, pinchConf);
       }
     }
 
@@ -113,32 +136,79 @@ class RuleBasedRecognizer implements GestureRecognizer {
       ) / 4.0;
 
       if (avgTipDist < palmSize * 1.1) {
-        return GestureType.fist;
+        final fistConf = _curlConfidence(ratios);
+        return _commit(GestureType.fist, fistConf);
       }
 
       // Fallback: all ratios negative = strong fist
-      if (indexRatio < 0 && middleRatio < 0 && ringRatio < 0 && pinkyRatio < 0) {
-        return GestureType.fist;
+      if (ratios[0] < 0 && ratios[1] < 0 && ratios[2] < 0 && ratios[3] < 0) {
+        return _commit(GestureType.fist, 1.0);
       }
     }
 
     // --- POINT: ONLY index extended ---
-    if (isIndexOpen && isMiddleCurled && isRingCurled && isPinkyCurled) {
+    if (isOpen[0] && isCurled[1] && isCurled[2] && isCurled[3]) {
       if (_distance(indexTip, wrist) > palmSize * 1.2) {
-        return GestureType.point;
+        final pointConf = _pointConfidence(ratios);
+        return _commit(GestureType.point, pointConf);
       }
     }
 
     // --- V-SIGN: Index + Middle extended, Ring + Pinky curled ---
-    if (isIndexOpen && isMiddleOpen && isRingCurled && isPinkyCurled) {
+    if (isOpen[0] && isOpen[1] && isCurled[2] && isCurled[3]) {
       final double spread = _distance(indexTip, middleTip);
       if (spread > palmSize * 0.18) {
-        return GestureType.vSign;
+        final vConf = _vSignConfidence(ratios, spread, palmSize);
+        return _commit(GestureType.vSign, vConf);
       }
     }
 
     // Ambiguous — return none (don't guess)
-    return GestureType.none;
+    return _commit(GestureType.none, 0.0);
+  }
+
+  GestureResult _commit(GestureType type, double confidence) {
+    return GestureResult(type, confidence.clamp(0.0, 1.0));
+  }
+
+  // ── Confidence helpers ─────────────────────────────────────────────────
+
+  double _openPalmConfidence(List<double> ratios, List<bool> straight) {
+    // Min of how far each finger is past the open threshold
+    double minConf = 1.0;
+    for (int i = 0; i < 4; i++) {
+      if (!straight[i]) return 0.3; // Barely qualifies
+      final conf = ((ratios[i] - _openSustain) / 0.15).clamp(0.0, 1.0);
+      minConf = min(minConf, conf);
+    }
+    return minConf;
+  }
+
+  double _curlConfidence(List<double> ratios) {
+    double minConf = 1.0;
+    for (int i = 0; i < 4; i++) {
+      final conf = ((_curlSustain - ratios[i]) / 0.08).clamp(0.0, 1.0);
+      minConf = min(minConf, conf);
+    }
+    return minConf;
+  }
+
+  double _pointConfidence(List<double> ratios) {
+    // Index should be well-extended, others well-curled
+    final indexConf = ((ratios[0] - _openSustain) / 0.15).clamp(0.0, 1.0);
+    final midConf = ((_curlSustain - ratios[1]) / 0.08).clamp(0.0, 1.0);
+    final ringConf = ((_curlSustain - ratios[2]) / 0.08).clamp(0.0, 1.0);
+    final pinkyConf = ((_curlSustain - ratios[3]) / 0.08).clamp(0.0, 1.0);
+    return [indexConf, midConf, ringConf, pinkyConf].reduce(min);
+  }
+
+  double _vSignConfidence(List<double> ratios, double spread, double palmSize) {
+    final indexConf = ((ratios[0] - _openSustain) / 0.15).clamp(0.0, 1.0);
+    final midConf = ((ratios[1] - _openSustain) / 0.15).clamp(0.0, 1.0);
+    final ringConf = ((_curlSustain - ratios[2]) / 0.08).clamp(0.0, 1.0);
+    final pinkyConf = ((_curlSustain - ratios[3]) / 0.08).clamp(0.0, 1.0);
+    final spreadConf = ((spread / palmSize - 0.18) / 0.15).clamp(0.0, 1.0);
+    return [indexConf, midConf, ringConf, pinkyConf, spreadConf].reduce(min);
   }
 
   double _distance(Landmark p1, Landmark p2) {

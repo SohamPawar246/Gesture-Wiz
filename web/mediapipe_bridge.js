@@ -23,9 +23,13 @@ let webcamRunning = false;
 let lastVideoTime = -1;
 
 // Latest results (read by Dart)
-window._mpHandResults = null;  // Array of hand landmark arrays
-window._mpFaceResult = null;   // {x, y} face center (normalized)
+window._mpHandResults = null; // Array of hand landmark arrays
+window._mpFaceResult = null; // {x, y} face center (normalized)
 window._mpReady = false;
+
+// Big Brother detection level (set by Dart via js_interop, read by drawPreview)
+// 0.0 = green (safe), 0.4+ = yellow (caution), 0.7+ = red (danger)
+window._bbDetectionLevel = 0.0;
 
 // Face smoothing (lightweight EMA for responsiveness)
 let _smoothFaceX = 0.5;
@@ -33,22 +37,39 @@ let _smoothFaceY = 0.5;
 let _faceSmoothing = 0.4; // Lower = more responsive (0.4 is fast but smooth)
 let _hasFace = false;
 
-const VISION_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
+const VISION_CDN =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
 
 // Hand connection pairs for drawing skeleton
 const HAND_CONNECTIONS = [
-  [0,1],[1,2],[2,3],[3,4],     // Thumb
-  [0,5],[5,6],[6,7],[7,8],     // Index
-  [0,9],[9,10],[10,11],[11,12],// Middle
-  [0,13],[13,14],[14,15],[15,16],// Ring
-  [0,17],[17,18],[18,19],[19,20],// Pinky
-  [5,9],[9,13],[13,17]          // Palm
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 4], // Thumb
+  [0, 5],
+  [5, 6],
+  [6, 7],
+  [7, 8], // Index
+  [0, 9],
+  [9, 10],
+  [10, 11],
+  [11, 12], // Middle
+  [0, 13],
+  [13, 14],
+  [14, 15],
+  [15, 16], // Ring
+  [0, 17],
+  [17, 18],
+  [18, 19],
+  [19, 20], // Pinky
+  [5, 9],
+  [9, 13],
+  [13, 17], // Palm
 ];
 
 async function initMediaPipe() {
-  const { HandLandmarker, FaceDetector, FilesetResolver } = await import(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest"
-  );
+  const { HandLandmarker, FaceDetector, FilesetResolver } =
+    await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest");
 
   const vision = await FilesetResolver.forVisionTasks(VISION_CDN);
 
@@ -72,7 +93,7 @@ async function initMediaPipe() {
       delegate: "GPU",
     },
     runningMode: "VIDEO",
-    minDetectionConfidence: 0.4,  // Lowered for faster pickup
+    minDetectionConfidence: 0.4, // Lowered for faster pickup
   });
 
   console.log("[MediaPipe Bridge] Models loaded.");
@@ -122,7 +143,7 @@ function predictLoop() {
       const hands = [];
       for (let i = 0; i < handResult.landmarks.length; i++) {
         const lms = handResult.landmarks[i].map((lm) => ({
-          x: 1.0 - lm.x,  // MIRROR: flip X for selfie-mode
+          x: 1.0 - lm.x, // MIRROR: flip X for selfie-mode
           y: lm.y,
           z: lm.z,
         }));
@@ -142,7 +163,7 @@ function predictLoop() {
       // Normalize to 0-1 and MIRROR X
       const rawFx = 1.0 - (bb.originX + bb.width / 2) / video.videoWidth;
       const rawFy = (bb.originY + bb.height / 2) / video.videoHeight;
-      
+
       // Lightweight EMA smoothing
       if (!_hasFace) {
         _smoothFaceX = rawFx;
@@ -163,6 +184,35 @@ function predictLoop() {
   }
 
   requestAnimationFrame(predictLoop);
+}
+
+function getBBColor(level) {
+  if (level < 0.4) {
+    return {
+      stroke: "#00FF55",
+      fill: "rgba(0, 255, 85, ",
+      glow: "rgba(0, 180, 40, ",
+    };
+  } else if (level < 0.7) {
+    const t = (level - 0.4) / 0.3;
+    const r = Math.round(255 * t);
+    const g = Math.round(255 - 55 * t);
+    return {
+      stroke: "rgb(" + r + ", " + g + ", 0)",
+      fill: "rgba(" + r + ", " + g + ", 0, ",
+      glow: "rgba(" + r + ", " + g + ", 0, ",
+    };
+  } else {
+    const t = Math.min((level - 0.7) / 0.3, 1.0);
+    const pulse = 0.7 + 0.3 * Math.sin(performance.now() / 150);
+    const r = 255;
+    const g = Math.round(200 * (1 - t) * pulse);
+    return {
+      stroke: "rgb(" + r + ", " + g + ", 0)",
+      fill: "rgba(" + r + ", " + g + ", 0, ",
+      glow: "rgba(255, 0, 0, ",
+    };
+  }
 }
 
 function drawPreview(rawHands, faceDetections) {
@@ -188,12 +238,16 @@ function drawPreview(rawHands, faceDetections) {
   }
 
   // Crosshair in centre
-  const cx = cw / 2, cy = ch / 2, cr = 10;
+  const cx = cw / 2,
+    cy = ch / 2,
+    cr = 10;
   previewCtx.strokeStyle = "rgba(0, 255, 80, 0.35)";
   previewCtx.lineWidth = 1;
   previewCtx.beginPath();
-  previewCtx.moveTo(cx - cr - 4, cy); previewCtx.lineTo(cx + cr + 4, cy);
-  previewCtx.moveTo(cx, cy - cr - 4); previewCtx.lineTo(cx, cy + cr + 4);
+  previewCtx.moveTo(cx - cr - 4, cy);
+  previewCtx.lineTo(cx + cr + 4, cy);
+  previewCtx.moveTo(cx, cy - cr - 4);
+  previewCtx.lineTo(cx, cy + cr + 4);
   previewCtx.arc(cx, cy, cr, 0, Math.PI * 2);
   previewCtx.stroke();
 
@@ -228,6 +282,10 @@ function drawPreview(rawHands, faceDetections) {
     }
   }
 
+  // --- Big Brother detection level colors ---
+  const bbLevel = window._bbDetectionLevel || 0;
+  const bbColors = getBBColor(bbLevel);
+
   // Draw face bounding box — "TARGET ACQUIRED" style
   if (faceDetections && faceDetections.length > 0) {
     const det = faceDetections[0];
@@ -239,39 +297,68 @@ function drawPreview(rawHands, faceDetections) {
 
     // Corner brackets instead of full rectangle
     const blen = 8;
-    previewCtx.strokeStyle = "#00FF55";
+    previewCtx.strokeStyle = bbColors.stroke;
     previewCtx.lineWidth = 2;
     previewCtx.beginPath();
     // Top-left
-    previewCtx.moveTo(rx, ry + blen); previewCtx.lineTo(rx, ry); previewCtx.lineTo(rx + blen, ry);
+    previewCtx.moveTo(rx, ry + blen);
+    previewCtx.lineTo(rx, ry);
+    previewCtx.lineTo(rx + blen, ry);
     // Top-right
-    previewCtx.moveTo(rx + rw - blen, ry); previewCtx.lineTo(rx + rw, ry); previewCtx.lineTo(rx + rw, ry + blen);
+    previewCtx.moveTo(rx + rw - blen, ry);
+    previewCtx.lineTo(rx + rw, ry);
+    previewCtx.lineTo(rx + rw, ry + blen);
     // Bottom-left
-    previewCtx.moveTo(rx, ry + rh - blen); previewCtx.lineTo(rx, ry + rh); previewCtx.lineTo(rx + blen, ry + rh);
+    previewCtx.moveTo(rx, ry + rh - blen);
+    previewCtx.lineTo(rx, ry + rh);
+    previewCtx.lineTo(rx + blen, ry + rh);
     // Bottom-right
-    previewCtx.moveTo(rx + rw - blen, ry + rh); previewCtx.lineTo(rx + rw, ry + rh); previewCtx.lineTo(rx + rw, ry + rh - blen);
+    previewCtx.moveTo(rx + rw - blen, ry + rh);
+    previewCtx.lineTo(rx + rw, ry + rh);
+    previewCtx.lineTo(rx + rw, ry + rh - blen);
     previewCtx.stroke();
 
-    // "ID" label
-    previewCtx.fillStyle = "#00FF55";
+    // "TARGET" label
+    previewCtx.fillStyle = bbColors.stroke;
     previewCtx.font = "bold 8px monospace";
     previewCtx.fillText("TARGET", rx, ry - 2);
   }
 
-  // "BB-CAM" indicator (replaces "LIVE")
-  previewCtx.fillStyle = "#00CC44";
+  // "BB-CAM" indicator
+  previewCtx.fillStyle = bbColors.stroke;
   previewCtx.beginPath();
   previewCtx.arc(10, 10, 4, 0, Math.PI * 2);
   previewCtx.fill();
-  previewCtx.fillStyle = "#00FF55";
   previewCtx.font = "bold 10px monospace";
   previewCtx.fillText("BB-CAM", 18, 15);
 
   // Timestamp / ID string bottom-left
-  previewCtx.fillStyle = "rgba(0, 200, 60, 0.6)";
+  previewCtx.fillStyle = bbColors.fill + "0.6)";
   previewCtx.font = "7px monospace";
   const ts = new Date().toISOString().substr(11, 8);
   previewCtx.fillText("REC " + ts, 4, ch - 4);
+
+  // --- Update canvas border and label based on detection level ---
+  if (previewCanvas) {
+    previewCanvas.style.borderColor = bbColors.stroke;
+    previewCanvas.style.boxShadow = "0 0 18px " + bbColors.glow + "0.35), inset 0 0 10px rgba(0,0,0,0.6)";
+  }
+  const bbLabel = document.getElementById("bb-label");
+  if (bbLabel) {
+    if (bbLevel >= 0.7) {
+      bbLabel.textContent = "\u26A0 BIG BROTHER NOTICES YOU \u26A0";
+      bbLabel.style.color = bbColors.stroke;
+      bbLabel.style.fontWeight = "bold";
+    } else if (bbLevel >= 0.4) {
+      bbLabel.textContent = "\uD83D\uDC41 SUSPICIOUS ACTIVITY \uD83D\uDC41";
+      bbLabel.style.color = bbColors.stroke;
+      bbLabel.style.fontWeight = "normal";
+    } else {
+      bbLabel.textContent = "\uD83D\uDC41 BIG BROTHER IS WATCHING \uD83D\uDC41";
+      bbLabel.style.color = "rgba(0, 200, 60, 0.75)";
+      bbLabel.style.fontWeight = "normal";
+    }
+  }
 }
 
 // --- Public API (called from Dart via js_interop) ---
