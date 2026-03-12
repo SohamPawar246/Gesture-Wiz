@@ -145,6 +145,13 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
                                   blurRadius: 18,
                                   spreadRadius: 2,
                                 ),
+                                BoxShadow(
+                                  color: gestureColor.withValues(
+                                    alpha: glow * 0.1,
+                                  ),
+                                  blurRadius: 40,
+                                  spreadRadius: 6,
+                                ),
                               ]
                             : null,
                       ),
@@ -169,7 +176,15 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
                                   ? [
                                       Shadow(
                                         blurRadius: 10,
-                                        color: gestureColor.withValues(alpha: 0.7),
+                                        color: gestureColor.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                      ),
+                                      Shadow(
+                                        blurRadius: 25,
+                                        color: gestureColor.withValues(
+                                          alpha: 0.3,
+                                        ),
                                       ),
                                     ]
                                   : null,
@@ -199,6 +214,13 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
           color: Palette.fireMid.withValues(alpha: 0.2),
           width: 1.0,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Palette.fireMid.withValues(alpha: 0.05),
+            blurRadius: 12,
+            spreadRadius: 2,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,6 +277,8 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
                   : Palette.impactRed,
               11,
               glowForce: isLowHp ? 0.3 + 0.4 * _pulseCtrl.value : 0.15,
+              shimmer: !isLowHp,
+              shimmerPhase: _pulseCtrl.value,
             ),
           ),
 
@@ -269,7 +293,16 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
             ],
           ),
           const SizedBox(height: 4),
-          _glowBar(ps.currentMana / ps.maxMana, Palette.uiMana, 9),
+          AnimatedBuilder(
+            animation: _pulseCtrl,
+            builder: (context, _) => _glowBar(
+              ps.currentMana / ps.maxMana,
+              Palette.uiMana,
+              9,
+              shimmer: true,
+              shimmerPhase: _pulseCtrl.value,
+            ),
+          ),
         ],
       ),
     );
@@ -277,32 +310,64 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
 
   // ── Combat Panel (Wave / Score / Kills) ───────────────────────
   Widget _buildCombatPanel(PlayerStats ps) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Sector name
-        _iconInfoChip(Icons.location_on, ps.currentNodeLabel, Palette.fireGold, Palette.fireDeep),
-        if (ps.totalWaves > 1) ...[
-          const SizedBox(height: 6),
-          _iconInfoChip(Icons.waves, 'WAVE ${ps.currentWave}/${ps.totalWaves}', Palette.fireGold, Palette.fireDeep),
-        ],
-        const SizedBox(height: 6),
-        _iconInfoChip(Icons.star, '${ps.score}', Palette.fireWhite, const Color(0xFF1A1008)),
-        const SizedBox(height: 6),
-        _iconInfoChip(Icons.dangerous, '${ps.killCount} KILLS', Palette.impactPink, const Color(0xFF1A0808)),
-      ],
+    return AnimatedBuilder(
+      animation: _pulseCtrl,
+      builder: (context, _) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Sector name
+            _iconInfoChip(
+              Icons.location_on,
+              ps.currentNodeLabel,
+              Palette.fireGold,
+              Palette.fireDeep,
+            ),
+            if (ps.totalWaves > 1) ...[
+              const SizedBox(height: 6),
+              _iconInfoChip(
+                Icons.waves,
+                'WAVE ${ps.currentWave}/${ps.totalWaves}',
+                Palette.fireGold,
+                Palette.fireDeep,
+              ),
+            ],
+            const SizedBox(height: 6),
+            _iconInfoChip(
+              Icons.star,
+              '${ps.score}',
+              Palette.fireWhite,
+              const Color(0xFF1A1008),
+            ),
+            const SizedBox(height: 6),
+            _iconInfoChip(
+              Icons.dangerous,
+              '${ps.killCount} KILLS',
+              Palette.impactPink,
+              const Color(0xFF1A0808),
+            ),
+          ],
+        );
+      },
     );
   }
 
   Widget _iconInfoChip(IconData icon, String text, Color color, Color bgColor) {
+    final glow = _pulseCtrl.value;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: bgColor.withValues(alpha: 0.85),
-        border: Border.all(color: color.withValues(alpha: 0.35), width: 1.0),
+        border: Border.all(
+          color: color.withValues(alpha: 0.35 + 0.15 * glow),
+          width: 1.0,
+        ),
         boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.08), blurRadius: 8),
+          BoxShadow(
+            color: color.withValues(alpha: 0.06 + 0.06 * glow),
+            blurRadius: 8 + 4 * glow,
+          ),
         ],
       ),
       child: Row(
@@ -318,7 +383,9 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
               fontFamily: 'monospace',
               fontSize: 13,
               letterSpacing: 2.0,
-              shadows: [Shadow(blurRadius: 6, color: color.withValues(alpha: 0.4))],
+              shadows: [
+                Shadow(blurRadius: 6, color: color.withValues(alpha: 0.4)),
+              ],
             ),
           ),
         ],
@@ -345,6 +412,8 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
     Color color,
     double height, {
     double glowForce = 0.15,
+    bool shimmer = false,
+    double shimmerPhase = 0.0,
   }) {
     return Stack(
       children: [
@@ -380,7 +449,83 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
             ),
           ),
         ),
+        // Shimmer highlight — animated bright streak moving across bar
+        if (shimmer && value > 0.05)
+          FractionallySizedBox(
+            widthFactor: value.clamp(0.0, 1.0),
+            child: ClipRect(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final barWidth = constraints.maxWidth;
+                  if (barWidth <= 0) return const SizedBox.shrink();
+                  final shimmerX = shimmerPhase * (barWidth + 30) - 15;
+                  return SizedBox(
+                    height: height,
+                    child: CustomPaint(
+                      painter: _ShimmerPainter(
+                        x: shimmerX,
+                        color: Colors.white,
+                        height: height,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        // Leading-edge glow dot
+        if (value > 0.02 && value < 0.98)
+          FractionallySizedBox(
+            widthFactor: value.clamp(0.0, 1.0),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                width: 4,
+                height: height + 2,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.8),
+                      blurRadius: 6,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Shimmer painter — draws a moving highlight streak on bars
+// ══════════════════════════════════════════════════════════════════════════
+class _ShimmerPainter extends CustomPainter {
+  final double x;
+  final Color color;
+  final double height;
+
+  _ShimmerPainter({required this.x, required this.color, required this.height});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(x - 8, 0, 16, height);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          colors: [
+            Colors.transparent,
+            color.withValues(alpha: 0.25),
+            Colors.transparent,
+          ],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ShimmerPainter old) => old.x != x;
 }

@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -248,9 +249,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       return EpilepsyWarningScreen(onComplete: _dismissEpilepsyWarning);
     }
 
-    // ── Main Menu ────────────────────────────────────────────────────
+    // Build the current screen widget based on state
+    Widget screenContent;
+
     if (gameState == GameState.mainMenu) {
-      return GestureCursorLayer(
+      screenContent = GestureCursorLayer(
         controller: _cursorController,
         child: MainMenuScreen(
           controller: _cursorController,
@@ -259,22 +262,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           onStory: _goToStory,
         ),
       );
-    }
-
-    // ── Story ───────────────────────────────────────────────────────
-    if (gameState == GameState.story) {
-      return GestureCursorLayer(
+    } else if (gameState == GameState.story) {
+      screenContent = GestureCursorLayer(
         controller: _cursorController,
         child: StoryScreen(
           controller: _cursorController,
           onContinue: _backToMenu,
         ),
       );
-    }
-
-    // ── Tutorial ─────────────────────────────────────────────────────
-    if (gameState == GameState.tutorial) {
-      return GestureCursorLayer(
+    } else if (gameState == GameState.tutorial) {
+      screenContent = GestureCursorLayer(
         controller: _cursorController,
         child: TutorialScreen(
           onComplete: () {
@@ -283,11 +280,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           controller: _cursorController,
         ),
       );
-    }
-
-    // ── Map Screen ───────────────────────────────────────────────────
-    if (gameState == GameState.map) {
-      return GestureCursorLayer(
+    } else if (gameState == GameState.map) {
+      screenContent = GestureCursorLayer(
         controller: _cursorController,
         child: MapScreen(
           playerStats: playerStats,
@@ -295,49 +289,140 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           onNodeSelected: _onNodeSelected,
         ),
       );
+    } else {
+      // ── Game + HUD + optional overlays ─────────────────────────────
+      screenContent = Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Palette.bgDark, Palette.bgDeep, Palette.bgDeep],
+              ),
+            ),
+          ),
+          if (game != null) GameWidget(game: game!),
+          ListenableBuilder(
+            listenable: playerStats,
+            builder: (context, _) {
+              return HUD(
+                activeGesture: activeGesture,
+                playerStats: playerStats,
+              );
+            },
+          ),
+          if (gameState == GameState.gameOver || gameState == GameState.victory)
+            GestureCursorLayer(
+              controller: _cursorController,
+              child: GameOverScreen(
+                controller: _cursorController,
+                isVictory: gameState == GameState.victory,
+                isBigBrotherGameOver: _bigBrotherGameOver,
+                score: playerStats.score,
+                kills: playerStats.killCount,
+                wave: playerStats.currentWave,
+                onRestart: _restartGame,
+                onMainMenu: _backToMenu,
+              ),
+            ),
+        ],
+      );
     }
 
-    // ── Game + HUD + optional overlays ───────────────────────────────
-    return Stack(
-      children: [
-        // 1. Background gradient
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Palette.bgDark, Palette.bgDeep, Palette.bgDeep],
-            ),
-          ),
-        ),
-
-        // 2. The Flame Game
-        if (game != null) GameWidget(game: game!),
-
-        // 3. Flutter UI Overlay (HUD)
-        ListenableBuilder(
-          listenable: playerStats,
-          builder: (context, _) {
-            return HUD(activeGesture: activeGesture, playerStats: playerStats);
-          },
-        ),
-
-        // 4. Game Over / Victory overlay — wrapped with gesture cursor layer
-        if (gameState == GameState.gameOver || gameState == GameState.victory)
-          GestureCursorLayer(
-            controller: _cursorController,
-            child: GameOverScreen(
-              controller: _cursorController,
-              isVictory: gameState == GameState.victory,
-              isBigBrotherGameOver: _bigBrotherGameOver,
-              score: playerStats.score,
-              kills: playerStats.killCount,
-              wave: playerStats.currentWave,
-              onRestart: _restartGame,
-              onMainMenu: _backToMenu,
-            ),
-          ),
-      ],
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 400),
+      transitionBuilder: (child, animation) {
+        return _CyberGlitchTransition(animation: animation, child: child);
+      },
+      child: KeyedSubtree(key: ValueKey(gameState), child: screenContent),
     );
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Cyberpunk Glitch Transition
+// ══════════════════════════════════════════════════════════════════════════
+class _CyberGlitchTransition extends StatelessWidget {
+  final Animation<double> animation;
+  final Widget child;
+
+  const _CyberGlitchTransition({required this.animation, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, _) {
+        final t = animation.value;
+        // Phase 1 (0-0.3): glitch bars appear, content slides in from offset
+        // Phase 2 (0.3-1.0): content fades in, glitch bars fade out
+        final opacity = t < 0.15 ? t / 0.15 : 1.0;
+        final slideOffset = (1.0 - t) * 12.0;
+
+        // RGB split offset for the glitch feel
+        final glitchOffset = t < 0.4 ? (1.0 - t / 0.4) * 6.0 : 0.0;
+
+        return Stack(
+          children: [
+            // Main content with slight vertical slide
+            Transform.translate(
+              offset: Offset(0, slideOffset),
+              child: Opacity(opacity: opacity.clamp(0.0, 1.0), child: child),
+            ),
+
+            // Glitch bars overlay (horizontal colored bars that fade out)
+            if (t < 0.5)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _GlitchBarsPainter(
+                      progress: t,
+                      offset: glitchOffset,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _GlitchBarsPainter extends CustomPainter {
+  final double progress;
+  final double offset;
+
+  _GlitchBarsPainter({required this.progress, required this.offset});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress >= 0.5) return;
+
+    final alpha = ((0.5 - progress) / 0.5).clamp(0.0, 1.0);
+    final rng = Random(42); // deterministic random for stable bars
+
+    for (int i = 0; i < 8; i++) {
+      final y = rng.nextDouble() * size.height;
+      final h = 2.0 + rng.nextDouble() * 6.0;
+      final xOff = (rng.nextDouble() - 0.5) * offset * 20;
+
+      // Cyan bar
+      canvas.drawRect(
+        Rect.fromLTWH(xOff, y, size.width, h),
+        Paint()..color = Colors.cyanAccent.withValues(alpha: alpha * 0.3),
+      );
+
+      // Pink bar offset
+      canvas.drawRect(
+        Rect.fromLTWH(-xOff * 0.7, y + h + 1, size.width, h * 0.6),
+        Paint()..color = Colors.pinkAccent.withValues(alpha: alpha * 0.2),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlitchBarsPainter old) =>
+      old.progress != progress || old.offset != offset;
 }

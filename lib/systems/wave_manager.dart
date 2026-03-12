@@ -150,8 +150,8 @@ class WaveManager {
     _enemiesSpawned++;
     onEnemySpawn?.call(data);
 
-    // Boss wave special handling (wave 10 is the boss wave)
-    if (currentWave == 10 && _enemiesSpawned == 1) {
+    // Boss wave special handling (wave 21 is the boss wave)
+    if (currentWave == 21 && _enemiesSpawned == 1) {
       final bossData = EnemyData.table[EnemyKind.boss]!;
       onEnemySpawn?.call(bossData);
       onBossSpawn?.call();
@@ -160,46 +160,113 @@ class WaveManager {
 
   _WaveConfig _getWaveConfig(int wave) {
     switch (wave) {
+      // ═══════════════════════════════════════════════════════════════
+      // SECTOR ALPHA (waves 1-3): Tutorial warmup — skulls only
+      // ═══════════════════════════════════════════════════════════════
       case 1:
         return _WaveConfig(
-          enemyCount: 3,
+          enemyCount: 4,
           spawnInterval: 2.5,
           enemyPool: [EnemyKind.skull],
         );
       case 2:
         return _WaveConfig(
           enemyCount: 5,
-          spawnInterval: 2.0,
+          spawnInterval: 2.2,
           enemyPool: [EnemyKind.skull],
         );
       case 3:
         return _WaveConfig(
-          enemyCount: 5,
-          spawnInterval: 1.8,
-          enemyPool: [EnemyKind.skull, EnemyKind.skull, EnemyKind.eyeball],
+          enemyCount: 6,
+          spawnInterval: 2.0,
+          enemyPool: [EnemyKind.skull],
         );
+
+      // ═══════════════════════════════════════════════════════════════
+      // NEON BLVD (waves 4-6): Introduce eyeballs
+      // ═══════════════════════════════════════════════════════════════
       case 4:
         return _WaveConfig(
-          enemyCount: 8,
-          spawnInterval: 1.5,
-          enemyPool: [EnemyKind.skull, EnemyKind.eyeball],
+          enemyCount: 6,
+          spawnInterval: 2.0,
+          enemyPool: [EnemyKind.skull, EnemyKind.skull, EnemyKind.eyeball],
         );
       case 5:
         return _WaveConfig(
-          enemyCount: 12,
-          spawnInterval: 1.3,
-          enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime],
+          enemyCount: 8,
+          spawnInterval: 1.8,
+          enemyPool: [EnemyKind.skull, EnemyKind.eyeball],
         );
       case 6:
         return _WaveConfig(
-          enemyCount: 14,
-          spawnInterval: 1.2,
-          enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.slime],
+          enemyCount: 10,
+          spawnInterval: 1.6,
+          enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.eyeball],
         );
+
+      // ═══════════════════════════════════════════════════════════════
+      // DARK ALLEY (waves 7-9): Eyeballs + introduce slimes
+      // ═══════════════════════════════════════════════════════════════
       case 7:
         return _WaveConfig(
-          enemyCount: 15,
-          spawnInterval: 1.0,
+          enemyCount: 7,
+          spawnInterval: 1.8,
+          enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime],
+        );
+      case 8:
+        return _WaveConfig(
+          enemyCount: 9,
+          spawnInterval: 1.6,
+          enemyPool: [EnemyKind.eyeball, EnemyKind.slime],
+        );
+      case 9:
+        return _WaveConfig(
+          enemyCount: 11,
+          spawnInterval: 1.4,
+          enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime],
+        );
+
+      // ═══════════════════════════════════════════════════════════════
+      // CORP PLAZA / UNDERGROUND (waves 10-13): Full roster minus knight
+      // ═══════════════════════════════════════════════════════════════
+      case 10:
+        return _WaveConfig(
+          enemyCount: 10,
+          spawnInterval: 1.5,
+          enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime],
+        );
+      case 11:
+        return _WaveConfig(
+          enemyCount: 12,
+          spawnInterval: 1.3,
+          enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.slime],
+        );
+      case 12:
+        return _WaveConfig(
+          enemyCount: 14,
+          spawnInterval: 1.2,
+          enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime],
+        );
+      case 13:
+        return _WaveConfig(
+          enemyCount: 16,
+          spawnInterval: 1.1,
+          enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.slime],
+        );
+
+      // ═══════════════════════════════════════════════════════════════
+      // SYS-MAIN / THE HUB (waves 14-17): Introduce knights, harder
+      // ═══════════════════════════════════════════════════════════════
+      case 14:
+        return _WaveConfig(
+          enemyCount: 14,
+          spawnInterval: 1.2,
+          enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.knight],
+        );
+      case 15:
+        return _WaveConfig(
+          enemyCount: 16,
+          spawnInterval: 1.1,
           enemyPool: [
             EnemyKind.skull,
             EnemyKind.eyeball,
@@ -207,13 +274,77 @@ class WaveManager {
             EnemyKind.knight,
           ],
         );
-      case 8:
+      case 16:
         return _WaveConfig(
-          enemyCount: 16,
+          enemyCount: 18,
           spawnInterval: 1.0,
           enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.knight],
         );
-      case 9:
+      case 17:
+        return _WaveConfig(
+          enemyCount: 20,
+          spawnInterval: 0.9,
+          enemyPool: [
+            EnemyKind.skull,
+            EnemyKind.eyeball,
+            EnemyKind.slime,
+            EnemyKind.knight,
+          ],
+        );
+
+      // ═══════════════════════════════════════════════════════════════
+      // CORE FRAME (waves 18-21): Endgame gauntlet
+      // ═══════════════════════════════════════════════════════════════
+      case 18:
+        return _WaveConfig(
+          enemyCount: 18,
+          spawnInterval: 1.0,
+          enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.knight],
+        );
+      case 19:
+        return _WaveConfig(
+          enemyCount: 20,
+          spawnInterval: 0.9,
+          enemyPool: [
+            EnemyKind.skull,
+            EnemyKind.eyeball,
+            EnemyKind.slime,
+            EnemyKind.knight,
+          ],
+        );
+      case 20:
+        return _WaveConfig(
+          enemyCount: 22,
+          spawnInterval: 0.8,
+          enemyPool: [
+            EnemyKind.eyeball,
+            EnemyKind.slime,
+            EnemyKind.knight,
+            EnemyKind.knight,
+          ],
+        );
+      case 21:
+        return _WaveConfig(
+          enemyCount: 24,
+          spawnInterval: 0.7,
+          enemyPool: [
+            EnemyKind.skull,
+            EnemyKind.eyeball,
+            EnemyKind.slime,
+            EnemyKind.knight,
+          ],
+        );
+
+      // ═══════════════════════════════════════════════════════════════
+      // SERVER ZERO (waves 22-24): Boss gauntlet
+      // ═══════════════════════════════════════════════════════════════
+      case 22:
+        return _WaveConfig(
+          enemyCount: 15,
+          spawnInterval: 1.0,
+          enemyPool: [EnemyKind.knight, EnemyKind.slime, EnemyKind.eyeball],
+        );
+      case 23:
         return _WaveConfig(
           enemyCount: 18,
           spawnInterval: 0.8,
@@ -224,15 +355,16 @@ class WaveManager {
             EnemyKind.knight,
           ],
         );
-      case 10:
+      case 24:
         return _WaveConfig(
-          enemyCount: 5,
+          enemyCount: 8,
           spawnInterval: 2.0,
-          enemyPool: [EnemyKind.skull, EnemyKind.knight],
+          enemyPool: [EnemyKind.knight, EnemyKind.knight],
         );
+
       default:
         return _WaveConfig(
-          enemyCount: 20,
+          enemyCount: 25,
           spawnInterval: 0.6,
           enemyPool: [
             EnemyKind.skull,
