@@ -26,11 +26,11 @@ class _StoryScreenState extends State<StoryScreen>
       'Your webcam is feeding data to the Ministry right now.\n\n'
       'The Ministry\'s Thought Police are no longer human.\n'
       'Digital constructs \u2014 skulls, eyes, and slimes \u2014\n'
-      'patrol the endless dungeon networks beneath the city.\n'
+      'patrol the endless grid networks beneath the city.\n'
       'They are remnants of erased minds, repurposed as weapons.\n\n'
       'You are one of the last free minds.\n'
-      'Captured and thrown into the Ministry\'s deepest prison,\n'
-      'you must fight through ten chambers to reach the surface.\n\n'
+      'Captured and thrown into the Ministry\'s deepest sector,\n'
+      'you must fight through the grid to reach the surface.\n\n'
       'The Resistance taught you the forbidden gestures:\n'
       'hand signs that channel raw energy through the cameras\n'
       'the Ministry uses to watch you. Turn their weapons against them.\n\n'
@@ -201,7 +201,8 @@ class _StoryScreenState extends State<StoryScreen>
                       child: _wrapGesture(
                         onTap: _skipOrContinue,
                         child: _StoryButton(
-                          label: _fullyRevealed ? '▶   CONTINUE' : '⏩  SKIP',
+                          label: _fullyRevealed ? 'CONTINUE' : 'SKIP',
+                          icon: _fullyRevealed ? Icons.play_arrow : Icons.fast_forward,
                           onTap: _skipOrContinue,
                         ),
                       ),
@@ -236,9 +237,10 @@ class _StoryScreenState extends State<StoryScreen>
 // ══════════════════════════════════════════
 class _StoryButton extends StatefulWidget {
   final String label;
+  final IconData? icon;
   final VoidCallback onTap;
 
-  const _StoryButton({required this.label, required this.onTap});
+  const _StoryButton({required this.label, this.icon, required this.onTap});
 
   @override
   State<_StoryButton> createState() => _StoryButtonState();
@@ -277,14 +279,21 @@ class _StoryButtonState extends State<_StoryButton> {
                   ]
                 : null,
           ),
-          child: Text(
-            widget.label,
-            style: TextStyle(
-              color: _hovered ? Colors.white : btnColor,
-              fontFamily: 'monospace',
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 4.0,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.icon != null) ...[
+                Icon(widget.icon, color: _hovered ? Colors.white : btnColor, size: 18),
+                const SizedBox(width: 10),
+              ],
+              Text(
+                widget.label,
+                style: TextStyle(
+                  color: _hovered ? Colors.white : btnColor,
+                  fontFamily: 'monospace',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 4.0,
               shadows: _hovered
                   ? [
                       Shadow(
@@ -293,7 +302,9 @@ class _StoryButtonState extends State<_StoryButton> {
                       ),
                     ]
                   : null,
-            ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

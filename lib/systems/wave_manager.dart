@@ -3,18 +3,30 @@ import 'dart:math';
 import '../models/enemy_type.dart';
 
 /// Manages wave progression — spawns enemies in escalating waves.
+/// Supports multi-wave levels: startLevel(startWave, endWave) runs
+/// consecutive waves and only fires onAllWavesClear when the last wave
+/// in the range is complete.
 class WaveManager {
   int currentWave = 0;
   int _enemiesSpawned = 0;
   int _enemiesInWave = 0;
   int _enemiesKilledInWave = 0;
   double _spawnTimer = 0;
-  double _restTimer = 0;
-  bool _isResting = true;
+  bool _isActive = false;
   bool _allWavesComplete = false;
 
-  static const int maxWaves = 10;
-  static const double restDuration = 4.0; // Seconds between waves
+  /// The inclusive range of waves for the current level.
+  int _startWave = 1;
+  int _endWave = 1;
+
+  /// Pending next-wave transition timer (> 0 means waiting to start next wave).
+  double _nextWaveDelay = 0;
+  bool _nextWavePending = false;
+
+  /// Which wave within the level (1-based relative index for HUD display).
+  int get waveInLevel =>
+      (currentWave - _startWave + 1).clamp(1, totalWavesInLevel);
+  int get totalWavesInLevel => _endWave - _startWave + 1;
 
   final void Function(EnemyData enemyData)? onEnemySpawn;
   final void Function(int wave)? onWaveStart;
@@ -30,9 +42,8 @@ class WaveManager {
     this.onBossSpawn,
   });
 
-  bool get isResting => _isResting;
+  bool get isActive => _isActive;
   bool get allWavesComplete => _allWavesComplete;
-  double get restProgress => (_restTimer / restDuration).clamp(0.0, 1.0);
 
   void reset() {
     currentWave = 0;
@@ -40,36 +51,47 @@ class WaveManager {
     _enemiesInWave = 0;
     _enemiesKilledInWave = 0;
     _spawnTimer = 0;
-    _restTimer = 0;
-    _isResting = true;
+    _isActive = false;
     _allWavesComplete = false;
+    _startWave = 1;
+    _endWave = 1;
+    _nextWaveDelay = 0;
+    _nextWavePending = false;
   }
 
   void onEnemyKilled() {
     _enemiesKilledInWave++;
-    if (_enemiesKilledInWave >= _enemiesInWave && _enemiesSpawned >= _enemiesInWave) {
+    if (_enemiesKilledInWave >= _enemiesInWave &&
+        _enemiesSpawned >= _enemiesInWave) {
+      _isActive = false;
       onWaveComplete?.call(currentWave);
 
-      if (currentWave >= maxWaves) {
+      if (currentWave >= _endWave) {
+        // All waves in this level are done
         _allWavesComplete = true;
         onAllWavesClear?.call();
       } else {
-        _isResting = true;
-        _restTimer = 0;
+        // Queue the next wave after a short delay
+        _nextWavePending = true;
+        _nextWaveDelay = 1.5;
       }
     }
   }
 
   void update(double dt) {
-    if (_allWavesComplete) return;
-
-    if (_isResting) {
-      _restTimer += dt;
-      if (_restTimer >= restDuration) {
-        _startNextWave();
+    // Handle pending next-wave transition
+    if (_nextWavePending) {
+      _nextWaveDelay -= dt;
+      if (_nextWaveDelay <= 0) {
+        _nextWavePending = false;
+        if (!_allWavesComplete) {
+          _startSingleWave(currentWave + 1);
+        }
       }
       return;
     }
+
+    if (_allWavesComplete || !_isActive) return;
 
     // Spawn enemies
     if (_enemiesSpawned < _enemiesInWave) {
@@ -82,17 +104,41 @@ class WaveManager {
     }
   }
 
-  void _startNextWave() {
-    currentWave++;
+  /// Start a multi-wave level from [startWave] to [endWave] inclusive.
+  void startLevel(int startWave, int endWave) {
+    _startWave = startWave;
+    _endWave = endWave;
+    _allWavesComplete = false;
+    _nextWavePending = false;
+    _nextWaveDelay = 0;
+    _startSingleWave(startWave);
+  }
+
+  /// Legacy single-wave start — kept for backward compatibility.
+  void startWave(int waveIndex) {
+    _startWave = waveIndex;
+    _endWave = waveIndex;
+    _allWavesComplete = false;
+    _nextWavePending = false;
+    _nextWaveDelay = 0;
+    _startSingleWave(waveIndex);
+  }
+
+  /// Internal: begin a specific wave index.
+  void _startSingleWave(int waveIndex) {
+    currentWave = waveIndex;
     _enemiesSpawned = 0;
     _enemiesKilledInWave = 0;
-    _spawnTimer = 0;
-    _isResting = false;
+    _isActive = true;
 
     final config = _getWaveConfig(currentWave);
     _enemiesInWave = config.enemyCount;
 
     onWaveStart?.call(currentWave);
+
+    // Spawn the first enemy immediately — no waiting
+    _spawnEnemy(config);
+    _spawnTimer = 0;
   }
 
   void _spawnEnemy(_WaveConfig config) {
@@ -104,8 +150,8 @@ class WaveManager {
     _enemiesSpawned++;
     onEnemySpawn?.call(data);
 
-    // Boss wave special handling
-    if (currentWave == maxWaves && _enemiesSpawned == 1) {
+    // Boss wave special handling (wave 10 is the boss wave)
+    if (currentWave == 10 && _enemiesSpawned == 1) {
       final bossData = EnemyData.table[EnemyKind.boss]!;
       onEnemySpawn?.call(bossData);
       onBossSpawn?.call();
@@ -116,25 +162,25 @@ class WaveManager {
     switch (wave) {
       case 1:
         return _WaveConfig(
-          enemyCount: 5,
+          enemyCount: 3,
           spawnInterval: 2.5,
           enemyPool: [EnemyKind.skull],
         );
       case 2:
         return _WaveConfig(
-          enemyCount: 7,
+          enemyCount: 5,
           spawnInterval: 2.0,
           enemyPool: [EnemyKind.skull],
         );
       case 3:
         return _WaveConfig(
-          enemyCount: 8,
+          enemyCount: 5,
           spawnInterval: 1.8,
           enemyPool: [EnemyKind.skull, EnemyKind.skull, EnemyKind.eyeball],
         );
       case 4:
         return _WaveConfig(
-          enemyCount: 10,
+          enemyCount: 8,
           spawnInterval: 1.5,
           enemyPool: [EnemyKind.skull, EnemyKind.eyeball],
         );
@@ -154,7 +200,12 @@ class WaveManager {
         return _WaveConfig(
           enemyCount: 15,
           spawnInterval: 1.0,
-          enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime, EnemyKind.knight],
+          enemyPool: [
+            EnemyKind.skull,
+            EnemyKind.eyeball,
+            EnemyKind.slime,
+            EnemyKind.knight,
+          ],
         );
       case 8:
         return _WaveConfig(
@@ -166,7 +217,12 @@ class WaveManager {
         return _WaveConfig(
           enemyCount: 18,
           spawnInterval: 0.8,
-          enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime, EnemyKind.knight],
+          enemyPool: [
+            EnemyKind.skull,
+            EnemyKind.eyeball,
+            EnemyKind.slime,
+            EnemyKind.knight,
+          ],
         );
       case 10:
         return _WaveConfig(
@@ -178,7 +234,12 @@ class WaveManager {
         return _WaveConfig(
           enemyCount: 20,
           spawnInterval: 0.6,
-          enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime, EnemyKind.knight],
+          enemyPool: [
+            EnemyKind.skull,
+            EnemyKind.eyeball,
+            EnemyKind.slime,
+            EnemyKind.knight,
+          ],
         );
     }
   }

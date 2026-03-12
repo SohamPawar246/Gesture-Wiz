@@ -41,15 +41,32 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
       case GestureType.none:
         return 'SCANNING...';
       case GestureType.point:
-        return '☝  FIRE BOLT';
+        return 'FIRE BOLT';
       case GestureType.fist:
-        return '✊  FORCE PUSH';
+        return 'FORCE PUSH';
       case GestureType.openPalm:
-        return '🖐  WARD SHIELD';
+        return 'WARD SHIELD';
       case GestureType.pinch:
-        return '🤏  GRIP';
+        return 'GRIP';
       case GestureType.vSign:
-        return '✌  OVERWATCH PULSE';
+        return 'OVERWATCH PULSE';
+    }
+  }
+
+  IconData _gestureIcon(GestureType gesture) {
+    switch (gesture) {
+      case GestureType.none:
+        return Icons.sensors;
+      case GestureType.point:
+        return Icons.local_fire_department;
+      case GestureType.fist:
+        return Icons.sports_mma;
+      case GestureType.openPalm:
+        return Icons.shield;
+      case GestureType.pinch:
+        return Icons.pinch;
+      case GestureType.vSign:
+        return Icons.flash_on;
     }
   }
 
@@ -131,23 +148,34 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
                               ]
                             : null,
                       ),
-                      child: Text(
-                        _gestureActionName(widget.activeGesture),
-                        style: TextStyle(
-                          color: isActive ? gestureColor : Palette.uiGrey,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          fontFamily: 'monospace',
-                          letterSpacing: 3.5,
-                          shadows: isActive
-                              ? [
-                                  Shadow(
-                                    blurRadius: 10,
-                                    color: gestureColor.withValues(alpha: 0.7),
-                                  ),
-                                ]
-                              : null,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _gestureIcon(widget.activeGesture),
+                            color: isActive ? gestureColor : Palette.uiGrey,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            _gestureActionName(widget.activeGesture),
+                            style: TextStyle(
+                              color: isActive ? gestureColor : Palette.uiGrey,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              fontFamily: 'monospace',
+                              letterSpacing: 3.5,
+                              shadows: isActive
+                                  ? [
+                                      Shadow(
+                                        blurRadius: 10,
+                                        color: gestureColor.withValues(alpha: 0.7),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -253,27 +281,21 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Wave
-        _infoChip(
-          '⚔  CHAMBER ${ps.currentWave}/10',
-          Palette.fireGold,
-          Palette.fireDeep,
-        ),
+        // Sector name
+        _iconInfoChip(Icons.location_on, ps.currentNodeLabel, Palette.fireGold, Palette.fireDeep),
+        if (ps.totalWaves > 1) ...[
+          const SizedBox(height: 6),
+          _iconInfoChip(Icons.waves, 'WAVE ${ps.currentWave}/${ps.totalWaves}', Palette.fireGold, Palette.fireDeep),
+        ],
         const SizedBox(height: 6),
-        // Score
-        _infoChip('★  ${ps.score}', Palette.fireWhite, const Color(0xFF1A1008)),
+        _iconInfoChip(Icons.star, '${ps.score}', Palette.fireWhite, const Color(0xFF1A1008)),
         const SizedBox(height: 6),
-        // Kills
-        _infoChip(
-          '☠  ${ps.killCount} KILLS',
-          Palette.impactPink,
-          const Color(0xFF1A0808),
-        ),
+        _iconInfoChip(Icons.dangerous, '${ps.killCount} KILLS', Palette.impactPink, const Color(0xFF1A0808)),
       ],
     );
   }
 
-  Widget _infoChip(String text, Color color, Color bgColor) {
+  Widget _iconInfoChip(IconData icon, String text, Color color, Color bgColor) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
@@ -283,16 +305,23 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
           BoxShadow(color: color.withValues(alpha: 0.08), blurRadius: 8),
         ],
       ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w900,
-          fontFamily: 'monospace',
-          fontSize: 13,
-          letterSpacing: 2.0,
-          shadows: [Shadow(blurRadius: 6, color: color.withValues(alpha: 0.4))],
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontFamily: 'monospace',
+              fontSize: 13,
+              letterSpacing: 2.0,
+              shadows: [Shadow(blurRadius: 6, color: color.withValues(alpha: 0.4))],
+            ),
+          ),
+        ],
       ),
     );
   }

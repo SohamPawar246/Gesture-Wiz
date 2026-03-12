@@ -1,10 +1,6 @@
 import 'dart:collection';
 import 'dart:js_interop';
-
-/// Sets window._bbDetectionLevel on the JS side so the webcam overlay
-/// can read it each frame and colorize the bounding box accordingly.
-@JS('_bbDetectionLevel')
-external set _jsBbDetectionLevel(JSNumber value);
+import 'dart:js_interop_unsafe';
 
 /// Tracks player behavior and computes a "detection level" for the
 /// Big Brother surveillance mechanic.
@@ -14,7 +10,7 @@ external set _jsBbDetectionLevel(JSNumber value);
 ///   2. Fires actions in rapid succession (spam detection)
 ///
 /// Detection decays slowly when the player is calm.
-/// If detection stays at red (>= 0.7) for 5 continuous seconds, game over.
+/// If detection stays at red for [gameOverDuration] continuous seconds → game over.
 class SurveillanceSystem {
   /// Current detection level: 0.0 (invisible) to 1.0 (fully detected).
   double _detectionLevel = 0.0;
@@ -29,17 +25,23 @@ class SurveillanceSystem {
   bool get triggered => _triggered;
 
   // ── Thresholds ──
-  static const double yellowThreshold = 0.35;
-  static const double redThreshold = 0.72;
-  static const double gameOverDuration = 6.0;
+  static const double yellowThreshold = 0.28;
+  static const double redThreshold = 0.60;
+  static const double gameOverDuration = 4.5;
 
   // ── Tuning constants ──
-  static const double velocityGain = 4.5;
-  static const double actionFireGain = 0.04;
-  static const double rapidFireMultiplier = 0.6;
-  static const double rapidFireWindow = 2.0;
-  static const double baseDecayRate = 0.10;
-  static const double greenDecayRate = 0.22;
+  static const double velocityGain = 8.0;
+  static const double actionFireGain = 0.10;
+  static const double rapidFireMultiplier = 0.9;
+  static const double rapidFireWindow = 3.0;
+  static const double baseDecayRate = 0.05;
+  static const double greenDecayRate = 0.07;
+
+  // ── Velocity smoothing (rolling average over N frames) ──
+  static const int _velocitySmoothFrames = 4;
+  static const double _velocityFloor = 0.00005;
+  static const double _maxGainPerFrame = 0.04;
+  final Queue<double> _velocityHistory = Queue<double>();
 
   // ── Rolling window for action fires ──
   final Queue<double> _actionFireTimes = Queue<double>();
@@ -48,18 +50,20 @@ class SurveillanceSystem {
   /// Grace period after reset where no detection accumulates.
   double _graceTimer = 0.0;
 
+  /// Push detection level to JS so the webcam overlay can colorize the
+  /// bounding box. Uses globalContext for reliable cross-compilation writes.
+  void _pushToJs(double level) {
+    globalContext.setProperty('_bbDetectionLevel'.toJS, level.toJS);
+  }
+
   /// Called each frame from FpvGame.update().
-  ///
-  /// [dt] - frame delta time in seconds.
-  /// [wristVelocitySq] - squared distance the wrist moved this frame.
-  ///   Pass 0.0 if no hand is tracked.
   void update(double dt, {double wristVelocitySq = 0.0}) {
     if (_triggered) return;
 
-    // Grace period after a reset — no accumulation, just push zero to JS.
+    // Grace period after a reset — no accumulation.
     if (_graceTimer > 0) {
       _graceTimer -= dt;
-      _jsBbDetectionLevel = (0.0).toJS;
+      _pushToJs(0.0);
       return;
     }
 
@@ -71,14 +75,25 @@ class SurveillanceSystem {
       _actionFireTimes.removeFirst();
     }
 
-    // Accumulate detection from velocity (ignore micro-jitter below floor)
-    const double velocityFloor = 0.003;
-    if (wristVelocitySq > velocityFloor) {
-      _detectionLevel +=
-          (wristVelocitySq - velocityFloor) * velocityGain * dt * 60.0;
+    // ── Velocity smoothing: rolling average to filter tracking noise ──
+    _velocityHistory.addLast(wristVelocitySq);
+    while (_velocityHistory.length > _velocitySmoothFrames) {
+      _velocityHistory.removeFirst();
+    }
+    double smoothedVelocity = 0.0;
+    for (final v in _velocityHistory) {
+      smoothedVelocity += v;
+    }
+    smoothedVelocity /= _velocityHistory.length;
+
+    // Accumulate detection from smoothed velocity (ignore below floor)
+    if (smoothedVelocity > _velocityFloor) {
+      final rawGain =
+          (smoothedVelocity - _velocityFloor) * velocityGain * dt * 60.0;
+      _detectionLevel += rawGain.clamp(0.0, _maxGainPerFrame);
     }
 
-    // Decay
+    // Decay — slower so gains actually accumulate
     final decayRate = _detectionLevel < yellowThreshold
         ? greenDecayRate
         : baseDecayRate;
@@ -98,7 +113,7 @@ class SurveillanceSystem {
     }
 
     // Push to JS for webcam overlay
-    _jsBbDetectionLevel = _detectionLevel.toJS;
+    _pushToJs(_detectionLevel);
   }
 
   /// Called when FpvGame fires an instant action (attack, push, ultimate).
@@ -111,6 +126,9 @@ class SurveillanceSystem {
     final fireCount = _actionFireTimes.length;
     final gain = actionFireGain * (1.0 + (fireCount - 1) * rapidFireMultiplier);
     _detectionLevel = (_detectionLevel + gain).clamp(0.0, 1.0);
+
+    // Also push immediately so the JS overlay responds to spam instantly
+    _pushToJs(_detectionLevel);
   }
 
   /// Current surveillance zone for external queries.
@@ -125,9 +143,10 @@ class SurveillanceSystem {
     _timeAtRed = 0.0;
     _triggered = false;
     _actionFireTimes.clear();
+    _velocityHistory.clear();
     _gameTime = 0.0;
-    _graceTimer = 1.0; // 1 second grace after restart
-    _jsBbDetectionLevel = (0.0).toJS;
+    _graceTimer = 1.5;
+    _pushToJs(0.0);
   }
 }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flame/game.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +44,9 @@ class FpvGame extends FlameGame
   Landmark? _prevWristForSurveillance;
   bool _bbGameOverFired = false;
 
+  // Level-complete timer — cancelable to prevent stale callbacks
+  Timer? _levelCompleteTimer;
+
   // Active enemies
   final List<Enemy> _enemies = [];
 
@@ -74,6 +79,7 @@ class FpvGame extends FlameGame
   final void Function()? onBigBrotherGameOver;
   final void Function(int wave)? onWaveChanged;
   final void Function()? onVictory;
+  final void Function(int wave)? onLevelComplete;
 
   // Action System (replaces SpellEngine)
   final ActionSystem _actionSystem = ActionSystem.theEye();
@@ -98,12 +104,16 @@ class FpvGame extends FlameGame
   bool _gameRunning = false;
   double _gameTime = 0;
 
+  // Pending level config
+  List<int>? _pendingLevelConfig;
+
   FpvGame({
     this.onGestureDetected,
     this.onGameOver,
     this.onBigBrotherGameOver,
     this.onWaveChanged,
     this.onVictory,
+    this.onLevelComplete,
     required this.playerStats,
     this.trackingService,
   });
@@ -138,20 +148,23 @@ class FpvGame extends FlameGame
     // CRT overlay
     add(RetroOverlay());
 
-    // Audio Init
-    await AudioManager.init();
+    // Audio Init — fire-and-forget to avoid blocking game start
+    AudioManager.init();
 
     // Wave manager
     _waveManager = WaveManager(
       onEnemySpawn: _spawnEnemy,
       onWaveStart: (wave) {
         AudioManager.playSfx('wave.wav', volume: 0.6);
-        playerStats.setWave(wave);
-        onWaveChanged?.call(wave);
+        // Update HUD with wave-in-level display
+        playerStats.setWave(_waveManager.waveInLevel);
+        playerStats.setTotalWaves(_waveManager.totalWavesInLevel);
+        onWaveChanged?.call(_waveManager.waveInLevel);
         add(
           FloatingText(
             position: Vector2(size.x / 2, size.y / 2),
-            text: 'CHAMBER $wave',
+            text:
+                'CHAMBER ${_waveManager.waveInLevel}/${_waveManager.totalWavesInLevel}',
             color: Palette.fireGold,
             fontSize: 36,
             duration: 2.0,
@@ -163,7 +176,7 @@ class FpvGame extends FlameGame
         add(
           FloatingText(
             position: Vector2(size.x / 2, size.y / 2),
-            text: 'CHAMBER $wave CLEAR',
+            text: 'WAVE CLEAR',
             color: Palette.fireGold,
             fontSize: 28,
             duration: 2.0,
@@ -171,7 +184,23 @@ class FpvGame extends FlameGame
         );
       },
       onAllWavesClear: () {
-        onVictory?.call();
+        // All waves in this level are done — return to map
+        add(
+          FloatingText(
+            position: Vector2(size.x / 2, size.y / 2),
+            text: 'SECTOR CLEAR',
+            color: Palette.fireGold,
+            fontSize: 32,
+            duration: 2.0,
+          ),
+        );
+        _levelCompleteTimer?.cancel();
+        _levelCompleteTimer = Timer(const Duration(seconds: 2), () {
+          if (_gameRunning) {
+            _gameRunning = false;
+            onLevelComplete?.call(_waveManager.currentWave);
+          }
+        });
       },
       onBossSpawn: () {
         AudioManager.playSfx('explode.wav', volume: 0.8);
@@ -189,6 +218,7 @@ class FpvGame extends FlameGame
     );
 
     _gameRunning = true;
+    // Note: _pendingLevelConfig is processed in update(), not here.
   }
 
   @override
@@ -197,20 +227,38 @@ class FpvGame extends FlameGame
     _mapper = CoordinateMapper(size);
   }
 
+  /// Full game restart — resets everything INCLUDING map progress.
+  /// Called from main menu "New Game" or similar.
   void restartGame() {
+    _prepareForLevel();
+    _waveManager.reset();
+    playerStats.resetForNewGame();
+    _gameRunning = true;
+  }
+
+  /// Prepares the game for a new level without wiping map progress.
+  /// Clears enemies, resets surveillance, resets combat state, refills HP/mana.
+  void _prepareForLevel() {
+    // Cancel any pending level-complete timer from a prior wave
+    _levelCompleteTimer?.cancel();
+    _levelCompleteTimer = null;
+
     // Reset surveillance FIRST to prevent any stale triggered state
     _surveillance.reset();
     _prevWristForSurveillance = null;
     _bbGameOverFired = false;
 
+    // Clear all existing enemies from the scene
     for (final enemy in _enemies) {
       enemy.removeFromParent();
     }
     _enemies.clear();
-    _waveManager.reset();
+
+    // Reset gesture state machines
     _stateMachine0.reset();
     _stateMachine1.reset();
-    playerStats.resetForNewGame();
+
+    // Reset combat state
     _comboMultiplier = 1;
     _killStreak = 0;
     _killStreakTimer = 0;
@@ -222,13 +270,40 @@ class FpvGame extends FlameGame
     _prevGrabHandPos = Vector2.zero();
     _grabDotTimer = 0;
     _gameTime = 0;
+
+    // Refill HP and mana for the new level (preserve score/xp/map)
+    playerStats.resetForLevel();
+
     _gameRunning = true;
+  }
+
+  void startLevel(int startWave, int endWave) {
+    // Always defer to the next update() frame so the game is guaranteed
+    // to be mounted and running when the wave actually starts.
+    _pendingLevelConfig = [startWave, endWave];
+  }
+
+  /// Stops the game loop and cancels any pending timers.
+  /// Call before discarding this instance to prevent stale callbacks.
+  void stopGame() {
+    _gameRunning = false;
+    _levelCompleteTimer?.cancel();
+    _levelCompleteTimer = null;
   }
 
   @override
   void update(double dt) {
     super.update(dt);
     if (size.x <= 0 || size.y <= 0) return;
+
+    // --- Deferred level start: process here so game is guaranteed mounted ---
+    if (_pendingLevelConfig != null) {
+      final config = _pendingLevelConfig!;
+      _pendingLevelConfig = null;
+      _prepareForLevel();
+      _waveManager.startLevel(config[0], config[1]);
+    }
+
     if (!_gameRunning) return;
 
     _gameTime += dt;
@@ -273,9 +348,20 @@ class FpvGame extends FlameGame
     bool hand0Tracked = false;
     for (int handId = 0; handId < 2; handId++) {
       final List<Landmark> landmarks;
-      if (usingTracking && trackingService!.getHandLandmarks(handId) != null) {
-        landmarks = trackingService!.getHandLandmarks(handId)!;
-      } else if (handId == 0 && !usingTracking) {
+      if (usingTracking) {
+        final handData = trackingService!.getHandLandmarks(handId);
+        if (handData != null && handData.isNotEmpty) {
+          landmarks = handData;
+        } else if (handId == 0) {
+          // Primary hand lost — fall through to hand-not-tracked logic
+          _hands[handId]?.updateLandmarks([], _mapper, dt: dt);
+          if (_grabbedEnemy != null) _releaseGrab(_grabHandPos);
+          continue;
+        } else {
+          _hands[handId]?.updateLandmarks([], _mapper, dt: dt);
+          continue;
+        }
+      } else if (handId == 0) {
         landmarks = _generateMouseDrivenLandmarks();
       } else {
         _hands[handId]?.updateLandmarks([], _mapper, dt: dt);
@@ -286,16 +372,29 @@ class FpvGame extends FlameGame
       _hands[handId]?.updateLandmarks(landmarks, _mapper, dt: dt);
 
       // --- Surveillance: track wrist velocity for primary hand ---
+      // Use RAW landmarks (not smoothed) so actual hand speed is measured
       if (handId == 0 && landmarks.isNotEmpty) {
         hand0Tracked = true;
-        final wrist = landmarks[0];
+        Landmark wristForSurveillance = landmarks[0];
+        if (usingTracking) {
+          try {
+            final rawList =
+                (trackingService as dynamic).getRawHandLandmarks(0)
+                    as List<Landmark>?;
+            if (rawList != null && rawList.isNotEmpty) {
+              wristForSurveillance = rawList[0];
+            }
+          } catch (_) {
+            // Fall back to smoothed landmark if raw unavailable
+          }
+        }
         double vSq = 0.0;
         if (_prevWristForSurveillance != null) {
-          final dx = wrist.x - _prevWristForSurveillance!.x;
-          final dy = wrist.y - _prevWristForSurveillance!.y;
+          final dx = wristForSurveillance.x - _prevWristForSurveillance!.x;
+          final dy = wristForSurveillance.y - _prevWristForSurveillance!.y;
           vSq = dx * dx + dy * dy;
         }
-        _prevWristForSurveillance = wrist;
+        _prevWristForSurveillance = wristForSurveillance;
         _surveillance.update(dt, wristVelocitySq: vSq);
       }
 
@@ -304,30 +403,32 @@ class FpvGame extends FlameGame
       List<Landmark>? rawLandmarks;
       if (usingTracking) {
         try {
-          rawLandmarks = (trackingService as dynamic).getRawHandLandmarks(handId);
+          rawLandmarks = (trackingService as dynamic).getRawHandLandmarks(
+            handId,
+          );
         } catch (_) {}
       }
       final recogLandmarks = rawLandmarks ?? landmarks;
 
       final rawGesture = _gestureRecognizer.recognize(recogLandmarks);
       final stateMachine = handId == 0 ? _stateMachine0 : _stateMachine1;
-      final stableGesture = stateMachine.processFrame(
-        rawGesture,
-        dt: dt,
-      );
+      final stableGesture = stateMachine.processFrame(rawGesture, dt: dt);
 
       final handPos = landmarks.isNotEmpty
           ? _mapper.mapLandmarkToScreen(landmarks[0])
           : Vector2(size.x / 2, size.y / 2);
 
       // Detect grab release (gesture transitioned away from pinch)
-      if (handId == 0 && stableGesture != GestureType.pinch && _grabbedEnemy != null) {
+      if (handId == 0 &&
+          stableGesture != GestureType.pinch &&
+          _grabbedEnemy != null) {
         _releaseGrab(handPos);
       }
 
       if (stableGesture != GestureType.none) {
         final result = _actionSystem.processGesture(
-          stableGesture, handPos,
+          stableGesture,
+          handPos,
           confidence: rawGesture.confidence,
         );
         if (result != null) {
@@ -563,12 +664,14 @@ class FpvGame extends FlameGame
             enemy.isGrabbed = true;
             _grabDotTimer = 0;
             AudioManager.playSfx('shield.wav', volume: 0.3);
-            add(FloatingText(
-              position: enemy.position.clone(),
-              text: 'GRABBED',
-              color: action.effectColor,
-              fontSize: 18,
-            ));
+            add(
+              FloatingText(
+                position: enemy.position.clone(),
+                text: 'GRABBED',
+                color: action.effectColor,
+                fontSize: 18,
+              ),
+            );
             break;
           }
         }
@@ -584,12 +687,14 @@ class FpvGame extends FlameGame
       if (_grabDotTimer >= 0.5) {
         _grabDotTimer = 0;
         _grabbedEnemy!.takeDamage(action.damage * 0.5);
-        add(FloatingText(
-          position: _grabbedEnemy!.position.clone(),
-          text: 'GRIP',
-          color: action.effectColor,
-          fontSize: 14,
-        ));
+        add(
+          FloatingText(
+            position: _grabbedEnemy!.position.clone(),
+            text: 'GRIP',
+            color: action.effectColor,
+            fontSize: 14,
+          ),
+        );
       }
     }
   }
@@ -622,23 +727,27 @@ class FpvGame extends FlameGame
           final perpDist = (toOther - throwNorm * dot).length;
           if (perpDist < 80) {
             other.takeDamage(2.5);
-            add(FloatingText(
-              position: other.position.clone(),
-              text: 'THROWN',
-              color: const Color(0xFF88FF44),
-              fontSize: 20,
-            ));
+            add(
+              FloatingText(
+                position: other.position.clone(),
+                text: 'THROWN',
+                color: const Color(0xFF88FF44),
+                fontSize: 20,
+              ),
+            );
           }
         }
       }
 
       // Kill the thrown enemy
       _grabbedEnemy!.takeDamage(999);
-      add(SpellEffect(
-        position: _grabbedEnemy!.position.clone(),
-        effectColor: const Color(0xFF88FF44),
-        spellName: 'THROW',
-      ));
+      add(
+        SpellEffect(
+          position: _grabbedEnemy!.position.clone(),
+          effectColor: const Color(0xFF88FF44),
+          spellName: 'THROW',
+        ),
+      );
       playerStats.addXp(12);
     } else {
       // Gentle release — minor damage

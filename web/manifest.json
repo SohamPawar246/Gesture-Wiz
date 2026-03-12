@@ -1,11 +1,11 @@
 {
-  "name": "PYROMANCER",
-  "short_name": "PYROMANCER",
+  "name": "THE EYE PROTOCOL",
+  "short_name": "EYE PROTOCOL",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#040808",
   "theme_color": "#CC4400",
-  "description": "Hand-tracking spell combat dungeon game. Snap your fingers. Defeat them all.",
+  "description": "Hand-tracking spell combat game. Navigate the grid. Defeat them all.",
   "orientation": "landscape-primary",
   "prefer_related_applications": false,
   "icons": [

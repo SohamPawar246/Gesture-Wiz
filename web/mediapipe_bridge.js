@@ -1,5 +1,5 @@
 /**
- * MediaPipe Vision JS Bridge for PYROMANCER
+ * MediaPipe Vision JS Bridge for THE EYE PROTOCOL
  *
  * Big Brother theme: the webcam feed is rendered as a surveillance camera
  * with green-tinted overlays, scan-lines, crosshair, and a "BB-CAM" indicator.
@@ -187,14 +187,14 @@ function predictLoop() {
 }
 
 function getBBColor(level) {
-  if (level < 0.4) {
+  if (level < 0.35) {
     return {
       stroke: "#00FF55",
       fill: "rgba(0, 255, 85, ",
       glow: "rgba(0, 180, 40, ",
     };
-  } else if (level < 0.7) {
-    const t = (level - 0.4) / 0.3;
+  } else if (level < 0.72) {
+    const t = (level - 0.35) / 0.37;
     const r = Math.round(255 * t);
     const g = Math.round(255 - 55 * t);
     return {
@@ -203,7 +203,7 @@ function getBBColor(level) {
       glow: "rgba(" + r + ", " + g + ", 0, ",
     };
   } else {
-    const t = Math.min((level - 0.7) / 0.3, 1.0);
+    const t = Math.min((level - 0.72) / 0.28, 1.0);
     const pulse = 0.7 + 0.3 * Math.sin(performance.now() / 150);
     const r = 255;
     const g = Math.round(200 * (1 - t) * pulse);
@@ -341,15 +341,16 @@ function drawPreview(rawHands, faceDetections) {
   // --- Update canvas border and label based on detection level ---
   if (previewCanvas) {
     previewCanvas.style.borderColor = bbColors.stroke;
-    previewCanvas.style.boxShadow = "0 0 18px " + bbColors.glow + "0.35), inset 0 0 10px rgba(0,0,0,0.6)";
+    previewCanvas.style.boxShadow =
+      "0 0 18px " + bbColors.glow + "0.35), inset 0 0 10px rgba(0,0,0,0.6)";
   }
   const bbLabel = document.getElementById("bb-label");
   if (bbLabel) {
-    if (bbLevel >= 0.7) {
+    if (bbLevel >= 0.72) {
       bbLabel.textContent = "\u26A0 BIG BROTHER NOTICES YOU \u26A0";
       bbLabel.style.color = bbColors.stroke;
       bbLabel.style.fontWeight = "bold";
-    } else if (bbLevel >= 0.4) {
+    } else if (bbLevel >= 0.35) {
       bbLabel.textContent = "\uD83D\uDC41 SUSPICIOUS ACTIVITY \uD83D\uDC41";
       bbLabel.style.color = bbColors.stroke;
       bbLabel.style.fontWeight = "normal";

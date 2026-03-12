@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 
+import '../models/map_node.dart';
 import '../systems/save_system.dart';
 
 class PlayerStats extends ChangeNotifier {
@@ -13,6 +14,12 @@ class PlayerStats extends ChangeNotifier {
   int _score = 0;
   int _killCount = 0;
   int _currentWave = 1;
+  int _totalWaves = 1;
+
+  // --- Map System Progress ---
+  List<String> _unlockedNodes = ['1'];
+  List<String> _completedNodes = [];
+  String _currentNodeId = '1';
 
   // Throttle notifications to avoid excessive UI rebuilds
   double _notifyAccumulator = 0;
@@ -34,6 +41,13 @@ class PlayerStats extends ChangeNotifier {
   int get score => _score;
   int get killCount => _killCount;
   int get currentWave => _currentWave;
+  int get totalWaves => _totalWaves;
+
+  List<String> get unlockedNodes => _unlockedNodes;
+  List<String> get completedNodes => _completedNodes;
+  String get currentNodeId => _currentNodeId;
+  String get currentNodeLabel =>
+      MapGraph.nodes[_currentNodeId]?.label ?? 'UNKNOWN';
 
   // Scaling stats
   int get maxXp => (_baseXpNeeded * pow(1.5, _level - 1)).toInt();
@@ -51,6 +65,9 @@ class PlayerStats extends ChangeNotifier {
     _score = 0;
     _killCount = 0;
     _currentWave = 1;
+    _unlockedNodes = await _saveSystem.loadUnlockedNodes();
+    _completedNodes = await _saveSystem.loadCompletedNodes();
+    _currentNodeId = await _saveSystem.loadCurrentNode();
     _immediateNotify();
   }
 
@@ -60,6 +77,23 @@ class PlayerStats extends ChangeNotifier {
     _score = 0;
     _killCount = 0;
     _currentWave = 1;
+    _unlockedNodes = ['1'];
+    _completedNodes = [];
+    _currentNodeId = '1';
+    _saveSystem.saveMapProgress(
+      _unlockedNodes,
+      _completedNodes,
+      _currentNodeId,
+    );
+    _immediateNotify();
+  }
+
+  /// Resets HP and mana for a new level without wiping map/XP progress.
+  void resetForLevel() {
+    _currentMana = maxMana;
+    _currentHp = maxHp;
+    _currentWave = 1;
+    _totalWaves = 1;
     _immediateNotify();
   }
 
@@ -126,6 +160,11 @@ class PlayerStats extends ChangeNotifier {
     _immediateNotify();
   }
 
+  void setTotalWaves(int total) {
+    _totalWaves = total;
+    _immediateNotify();
+  }
+
   // --- XP ---
   void addXp(int amount) {
     _currentXp += amount;
@@ -138,6 +177,34 @@ class PlayerStats extends ChangeNotifier {
     }
 
     _saveSystem.saveProgress(_level, _currentXp);
+    _immediateNotify();
+  }
+
+  // --- Map Progression ---
+  void completeNode(String nodeId, List<String> newUnlocks) {
+    if (!_completedNodes.contains(nodeId)) {
+      _completedNodes.add(nodeId);
+    }
+    for (var unlock in newUnlocks) {
+      if (!_unlockedNodes.contains(unlock)) {
+        _unlockedNodes.add(unlock);
+      }
+    }
+    _saveSystem.saveMapProgress(
+      _unlockedNodes,
+      _completedNodes,
+      _currentNodeId,
+    );
+    _immediateNotify();
+  }
+
+  void setCurrentNode(String nodeId) {
+    _currentNodeId = nodeId;
+    _saveSystem.saveMapProgress(
+      _unlockedNodes,
+      _completedNodes,
+      _currentNodeId,
+    );
     _immediateNotify();
   }
 }

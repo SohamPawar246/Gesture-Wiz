@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../game/palette.dart';
 import '../models/gesture_cursor_controller.dart';
 import 'gesture_cursor_overlay.dart';
+import 'glitch_text.dart';
 
 /// Epic animated main menu screen with fire particles, glowing title, and gesture reference.
 class MainMenuScreen extends StatefulWidget {
@@ -149,14 +150,16 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                       ),
                       color: const Color(0xFF001100),
                     ),
-                    child: const Text(
-                      '👁  BIG BROTHER IS WATCHING  👁',
+                    child: const GlitchText(
+                      text: 'BIG BROTHER IS WATCHING',
                       style: TextStyle(
                         color: Color(0xFF44FF44),
                         fontFamily: 'monospace',
                         fontSize: 11,
                         letterSpacing: 3.5,
                       ),
+                      glitchFrequency: 1.0,
+                      glitchIntensity: 0.6,
                     ),
                   ),
 
@@ -170,13 +173,13 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                       return Column(
                         children: [
                           Text(
-                            'PYRO',
+                            'THE EYE',
                             style: TextStyle(
                               color: Palette.fireWhite,
                               fontFamily: 'monospace',
-                              fontSize: 72,
+                              fontSize: 56,
                               fontWeight: FontWeight.w900,
-                              letterSpacing: 16.0,
+                              letterSpacing: 12.0,
                               height: 0.9,
                               shadows: [
                                 Shadow(
@@ -201,13 +204,13 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                             ),
                           ),
                           Text(
-                            'MANCER',
+                            'PROTOCOL',
                             style: TextStyle(
                               color: Palette.fireGold,
                               fontFamily: 'monospace',
-                              fontSize: 72,
+                              fontSize: 56,
                               fontWeight: FontWeight.w900,
-                              letterSpacing: 16.0,
+                              letterSpacing: 12.0,
                               height: 0.9,
                               shadows: [
                                 Shadow(
@@ -253,12 +256,10 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           color: const Color(0xFF0A0F0F),
-                          child: const Text(
-                            '✦',
-                            style: TextStyle(
-                              color: Palette.fireGold,
-                              fontSize: 16,
-                            ),
+                          child: const Icon(
+                            Icons.remove_red_eye,
+                            color: Palette.fireGold,
+                            size: 16,
                           ),
                         ),
                       ],
@@ -284,7 +285,8 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                   _gestureWrap(
                     onTap: widget.onPlayPressed,
                     child: _MenuButton(
-                      label: '▶   ENTER THE DUNGEON',
+                      label: 'ENTER THE GRID',
+                      icon: Icons.play_arrow,
                       color: Palette.fireGold,
                       onTap: widget.onPlayPressed,
                       pulse: _pulseCtrl,
@@ -300,7 +302,8 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                       _gestureWrap(
                         onTap: widget.onStory,
                         child: _MenuButton(
-                          label: '📜  STORY',
+                          label: 'STORY',
+                          icon: Icons.menu_book,
                           color: const Color(0xFF44FF44),
                           onTap: widget.onStory,
                           pulse: null,
@@ -311,7 +314,8 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                       _gestureWrap(
                         onTap: widget.onHowToPlay,
                         child: _MenuButton(
-                          label: '?   HOW TO PLAY',
+                          label: 'HOW TO PLAY',
+                          icon: Icons.help_outline,
                           color: Palette.fireMid,
                           onTap: widget.onHowToPlay,
                           pulse: null,
@@ -369,6 +373,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
 // ══════════════════════════════════════════
 class _MenuButton extends StatefulWidget {
   final String label;
+  final IconData? icon;
   final Color color;
   final VoidCallback onTap;
   final AnimationController? pulse;
@@ -376,6 +381,7 @@ class _MenuButton extends StatefulWidget {
 
   const _MenuButton({
     required this.label,
+    this.icon,
     required this.color,
     required this.onTap,
     required this.pulse,
@@ -423,14 +429,25 @@ class _MenuButtonState extends State<_MenuButton> {
                   ]
                 : null,
           ),
-          child: Text(
-            widget.label,
-            style: TextStyle(
-              color: _hovered ? Palette.fireWhite : widget.color,
-              fontFamily: 'monospace',
-              fontSize: widget.isPrimary ? 20 : 16,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 4.0,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.icon != null) ...[
+                Icon(
+                  widget.icon,
+                  color: _hovered ? Palette.fireWhite : widget.color,
+                  size: widget.isPrimary ? 22 : 18,
+                ),
+                const SizedBox(width: 10),
+              ],
+              Text(
+                widget.label,
+                style: TextStyle(
+                  color: _hovered ? Palette.fireWhite : widget.color,
+                  fontFamily: 'monospace',
+                  fontSize: widget.isPrimary ? 20 : 16,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 4.0,
               shadows: _hovered
                   ? [
                       Shadow(
@@ -439,7 +456,9 @@ class _MenuButtonState extends State<_MenuButton> {
                       ),
                     ]
                   : null,
-            ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -475,10 +494,10 @@ class _GestureReference extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const gestures = [
-      ('☝', 'FIRE BOLT', Color(0xFFFF6622)),
-      ('✊', 'FORCE PUSH', Color(0xFF8844FF)),
-      ('🖐', 'WARD SHIELD', Color(0xFF44DDFF)),
-      ('✌', 'OVERWATCH', Color(0xFFFFFF44)),
+      (Icons.local_fire_department, 'FIRE BOLT', Color(0xFFFF6622)),
+      (Icons.sports_mma, 'FORCE PUSH', Color(0xFF8844FF)),
+      (Icons.shield, 'WARD SHIELD', Color(0xFF44DDFF)),
+      (Icons.flash_on, 'OVERWATCH', Color(0xFFFFFF44)),
     ];
 
     return Container(
@@ -514,7 +533,7 @@ class _GestureReference extends StatelessWidget {
 }
 
 class _GestureChip extends StatelessWidget {
-  final String icon;
+  final IconData icon;
   final String label;
   final Color color;
 
@@ -529,7 +548,7 @@ class _GestureChip extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(icon, style: const TextStyle(fontSize: 22)),
+        Icon(icon, color: color, size: 22),
         const SizedBox(height: 5),
         Text(
           label,

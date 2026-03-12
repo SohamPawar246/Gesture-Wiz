@@ -1,0 +1,14 @@
+﻿Analyzing Flame...
+
+warning - lib\game\fpv_game.dart:273:9 - Unnecessary type check; the result is always 'true'. Try correcting the type check, or removing the type check. - unnecessary_type_check
+   info - lib\systems\hand_tracking\tracking_factory.dart:1:1 - Dangling library doc comment. Add a 'library' directive after the library comment. - dangling_library_doc_comments
+   info - lib\systems\hand_tracking\tracking_factory_web.dart:1:1 - Dangling library doc comment. Add a 'library' directive after the library comment. - dangling_library_doc_comments
+   info - lib\systems\hand_tracking\udp_service.dart:53:19 - The member 'getHandLandmarks' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
+   info - lib\systems\hand_tracking\udp_service.dart:59:16 - The member 'facePosition' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
+   info - lib\systems\hand_tracking\udp_service.dart:62:11 - The member 'handCount' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
+   info - lib\systems\hand_tracking\udp_service.dart:65:12 - The member 'isConnected' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
+   info - lib\systems\hand_tracking\udp_service.dart:68:16 - The member 'start' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
+   info - lib\systems\hand_tracking\udp_service.dart:189:8 - The member 'dispose' overrides an inherited member but isn't annotated with '@override'. Try adding the '@override' annotation. - annotate_overrides
+   info - lib\ui\map_screen.dart:32:10 - The private field _zoom could be 'final'. Try making the field 'final'. - prefer_final_fields
+
+10 issues found.

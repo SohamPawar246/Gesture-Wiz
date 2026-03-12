@@ -98,7 +98,7 @@ class _GameOverScreenState extends State<GameOverScreen>
         ? 'DETECTED'
         : 'GAME OVER';
     final subtitle = widget.isVictory
-        ? 'THE DUNGEON HAS FALLEN'
+        ? 'THE GRID HAS FALLEN'
         : widget.isBigBrotherGameOver
         ? 'BIG BROTHER NOTICED YOU'
         : 'THE DARKNESS CONSUMED YOU';
@@ -267,11 +267,7 @@ class _GameOverScreenState extends State<GameOverScreen>
                       const SizedBox(height: 10),
                       _statRow('KILLS', '${widget.kills}', Palette.impactRed),
                       const SizedBox(height: 10),
-                      _statRow(
-                        'CHAMBER',
-                        '${widget.wave} / 10',
-                        Palette.fireMid,
-                      ),
+                      _statRow('SECTOR', '${widget.wave}', Palette.fireMid),
 
                       const SizedBox(height: 20),
 
@@ -294,7 +290,8 @@ class _GameOverScreenState extends State<GameOverScreen>
                       _gestureWrap(
                         onTap: widget.onRestart,
                         child: _ActionButton(
-                          label: '▶  PLAY AGAIN',
+                          label: 'PLAY AGAIN',
+                          icon: Icons.play_arrow,
                           color: Palette.fireGold,
                           onTap: widget.onRestart,
                         ),
@@ -303,7 +300,8 @@ class _GameOverScreenState extends State<GameOverScreen>
                       _gestureWrap(
                         onTap: widget.onMainMenu,
                         child: _ActionButton(
-                          label: '⌂  MAIN MENU',
+                          label: 'MAIN MENU',
+                          icon: Icons.home,
                           color: Palette.uiGrey,
                           onTap: widget.onMainMenu,
                         ),
@@ -395,10 +393,12 @@ class _GameOverScreenState extends State<GameOverScreen>
 
 class _ActionButton extends StatefulWidget {
   final String label;
+  final IconData? icon;
   final Color color;
   final VoidCallback onTap;
   const _ActionButton({
     required this.label,
+    this.icon,
     required this.color,
     required this.onTap,
   });
@@ -440,15 +440,24 @@ class _ActionButtonState extends State<_ActionButton> {
                 : null,
           ),
           child: Center(
-            child: Text(
-              widget.label,
-              style: TextStyle(
-                color: _hovered ? Palette.fireWhite : widget.color,
-                fontFamily: 'monospace',
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.icon != null) ...[
+                  Icon(widget.icon, color: _hovered ? Palette.fireWhite : widget.color, size: 18),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  widget.label,
+                  style: TextStyle(
+                    color: _hovered ? Palette.fireWhite : widget.color,
+                    fontFamily: 'monospace',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
                 letterSpacing: 4.0,
               ),
+            ),
+              ],
             ),
           ),
         ),

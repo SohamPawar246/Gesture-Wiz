@@ -22,8 +22,7 @@ class _TutorialScreenState extends State<TutorialScreen>
 
   static const List<_TutorialStep> _steps = [
     _TutorialStep(
-      icon: '☝',
-      emoji: true,
+      icon: Icons.local_fire_department,
       title: 'POINT',
       subtitle: 'FIRE BOLT',
       description:
@@ -31,24 +30,21 @@ class _TutorialScreenState extends State<TutorialScreen>
       color: Color(0xFFFF6622),
     ),
     _TutorialStep(
-      icon: '✊',
-      emoji: true,
+      icon: Icons.sports_mma,
       title: 'FIST',
       subtitle: 'FORCE PUSH',
       description: 'Clench your fist\nto release a powerful\nAoE force wave.',
       color: Color(0xFF9944FF),
     ),
     _TutorialStep(
-      icon: '🖐',
-      emoji: true,
+      icon: Icons.shield,
       title: 'OPEN PALM',
       subtitle: 'WARD SHIELD',
       description: 'Hold your palm open\nto block incoming\nenemy spells.',
       color: Color(0xFF44DDFF),
     ),
     _TutorialStep(
-      icon: '✌',
-      emoji: true,
+      icon: Icons.flash_on,
       title: 'V SIGN',
       subtitle: 'OVERWATCH PULSE',
       description:
@@ -104,121 +100,117 @@ class _TutorialScreenState extends State<TutorialScreen>
       children: [
         // Background gradient
         Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xFF040808),
-                        Color(0xFF0A0F0F),
-                        Color(0xFF180808),
-                      ],
-                      stops: [0.0, 0.5, 1.0],
-                    ),
-                  ),
-                ),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF040808), Color(0xFF0A0F0F), Color(0xFF180808)],
+              stops: [0.0, 0.5, 1.0],
+            ),
+          ),
+        ),
 
-                // Bottom fire glow
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: 150,
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [Color(0x55CC3300), Colors.transparent],
-                        ),
-                      ),
-                    ),
-                  ),
+        // Bottom fire glow
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 150,
+          child: IgnorePointer(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Color(0x55CC3300), Colors.transparent],
                 ),
+              ),
+            ),
+          ),
+        ),
         // Content
         SafeArea(
-            child: Column(
-              children: [
-                // Top bar
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'PYROMANCER',
-                        style: TextStyle(
-                          color: Palette.fireGold,
-                          fontFamily: 'monospace',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 3,
-                        ),
+          child: Column(
+            children: [
+              // Top bar
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'NIGHT CITY',
+                      style: TextStyle(
+                        color: Palette.fireGold,
+                        fontFamily: 'monospace',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 3,
                       ),
-                      _gestureWrap(
+                    ),
+                    _gestureWrap(
+                      onTap: _skip,
+                      child: GestureDetector(
                         onTap: _skip,
-                        child: GestureDetector(
-                          onTap: _skip,
-                          child: const Text(
-                            'SKIP  →',
-                            style: TextStyle(
-                              color: Palette.uiGrey,
-                              fontFamily: 'monospace',
-                              fontSize: 12,
-                              letterSpacing: 2,
-                            ),
+                        child: const Text(
+                          'SKIP  →',
+                          style: TextStyle(
+                            color: Palette.uiGrey,
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            letterSpacing: 2,
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+              ),
 
-                // Step indicators
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: List.generate(_steps.length, (i) {
-                      final active = i == _step;
-                      final done = i < _step;
-                      return Expanded(
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          height: 3,
-                          margin: const EdgeInsets.symmetric(horizontal: 3),
-                          decoration: BoxDecoration(
-                            color: done
-                                ? Palette.fireGold
-                                : active
-                                ? step.color
-                                : Palette.uiGrey.withValues(alpha: 0.3),
-                            boxShadow: active
-                                ? [
-                                    BoxShadow(
-                                      color: step.color.withValues(alpha: 0.5),
-                                      blurRadius: 6,
-                                    ),
-                                  ]
-                                : null,
-                          ),
+              // Step indicators
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: List.generate(_steps.length, (i) {
+                    final active = i == _step;
+                    final done = i < _step;
+                    return Expanded(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        height: 3,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: done
+                              ? Palette.fireGold
+                              : active
+                              ? step.color
+                              : Palette.uiGrey.withValues(alpha: 0.3),
+                          boxShadow: active
+                              ? [
+                                  BoxShadow(
+                                    color: step.color.withValues(alpha: 0.5),
+                                    blurRadius: 6,
+                                  ),
+                                ]
+                              : null,
                         ),
-                      );
-                    }),
-                  ),
+                      ),
+                    );
+                  }),
                 ),
+              ),
 
-                const Spacer(flex: 2),
+              const Spacer(flex: 2),
 
-                // Card
-                _gestureWrap(
+              // Card
+              _gestureWrap(
+                onTap: _next,
+                child: GestureDetector(
                   onTap: _next,
-                  child: GestureDetector(
-                    onTap: _next,
-                    child: AnimatedBuilder(
+                  child: AnimatedBuilder(
                     animation: _slideCtrl,
                     builder: (context, child) {
                       final slide = CurvedAnimation(
@@ -281,9 +273,10 @@ class _TutorialScreenState extends State<TutorialScreen>
                                   ],
                                 ),
                                 child: Center(
-                                  child: Text(
+                                  child: Icon(
                                     step.icon,
-                                    style: const TextStyle(fontSize: 48),
+                                    color: step.color,
+                                    size: 48,
                                   ),
                                 ),
                               );
@@ -357,7 +350,7 @@ class _TutorialScreenState extends State<TutorialScreen>
                           Text(
                             _step < _steps.length - 1
                                 ? 'TAP TO CONTINUE  →'
-                                : '▶  TAP TO ENTER THE DUNGEON',
+                                : 'TAP TO ENTER THE GRID',
                             style: TextStyle(
                               color: Palette.fireGold.withValues(alpha: 0.65),
                               fontFamily: 'monospace',
@@ -369,14 +362,14 @@ class _TutorialScreenState extends State<TutorialScreen>
                       ),
                     ),
                   ),
-                  ),
                 ),
+              ),
 
-                const Spacer(flex: 3),
-              ],
-            ),
+              const Spacer(flex: 3),
+            ],
           ),
-        ],
+        ),
+      ],
     );
 
     return Scaffold(
@@ -399,8 +392,7 @@ class _TutorialScreenState extends State<TutorialScreen>
 }
 
 class _TutorialStep {
-  final String icon;
-  final bool emoji;
+  final IconData icon;
   final String title;
   final String subtitle;
   final String description;
@@ -408,7 +400,6 @@ class _TutorialStep {
 
   const _TutorialStep({
     required this.icon,
-    required this.emoji,
     required this.title,
     required this.subtitle,
     required this.description,

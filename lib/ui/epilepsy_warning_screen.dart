@@ -19,20 +19,21 @@ class _EpilepsyWarningScreenState extends State<EpilepsyWarningScreen>
   late final AnimationController _ctrl;
 
   // Duration breakdown (total 4.5 s):
-  static const double _fadeInEnd = 1.0 / 4.5;   // 0 → 1 s
+  static const double _fadeInEnd = 1.0 / 4.5; // 0 → 1 s
   static const double _fadeOutStart = 3.5 / 4.5; // 3.5 s → 4.5 s
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 4500),
-    )..addStatusListener((status) {
-        if (status == AnimationStatus.completed) {
-          widget.onComplete();
-        }
-      });
+    _ctrl =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 4500),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            widget.onComplete();
+          }
+        });
     _ctrl.forward();
   }
 
@@ -83,12 +84,10 @@ class _EpilepsyWarningScreenState extends State<EpilepsyWarningScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Warning icon
-                      const Text(
-                        '⚠',
-                        style: TextStyle(
-                          color: Color(0xFFFF3333),
-                          fontSize: 52,
-                        ),
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Color(0xFFFF3333),
+                        size: 52,
                       ),
 
                       const SizedBox(height: 16),

@@ -84,6 +84,12 @@ class GestureCursorController extends ChangeNotifier {
       _prevPinching = isPinching;
       isPinching = false;
       pinchJustFired = false;
+
+      // Auto-center the cursor smoothly if tracking is lost
+      _smoothX += (0.5 - _smoothX) * dt * 3.0;
+      _smoothY += (0.5 - _smoothY) * dt * 3.0;
+      posX = _smoothX.clamp(0.0, 1.0);
+      posY = _smoothY.clamp(0.0, 1.0);
     }
 
     // Face tracking is independent of hand visibility — update every frame.

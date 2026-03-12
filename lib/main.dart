@@ -9,6 +9,8 @@ import 'ui/epilepsy_warning_screen.dart';
 import 'ui/main_menu_screen.dart';
 import 'ui/story_screen.dart';
 import 'ui/gesture_cursor_overlay.dart';
+import 'ui/map_screen.dart';
+import 'models/map_node.dart';
 import 'game/fpv_game.dart';
 import 'game/palette.dart';
 import 'models/gesture_cursor_controller.dart';
@@ -30,7 +32,7 @@ class FpvMagicApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'PYROMANCER',
+      title: 'THE GRID',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: Palette.bgDeep),
       home: const Scaffold(body: GameScreen()),
@@ -43,6 +45,7 @@ enum GameState {
   mainMenu,
   story,
   tutorial,
+  map,
   playing,
   gameOver,
   victory,
@@ -77,10 +80,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Future<void> _initGameSystems() async {
     final saveSystem = SaveSystem();
     playerStats = PlayerStats(saveSystem: saveSystem);
-    await playerStats.load();
 
     trackingService = createTrackingService();
-    await trackingService.start();
+
+    // Start player stats loading and tracking service in parallel.
+    // Don't block on trackingService — it loads the ML model which is slow.
+    // The user sees the epilepsy warning + menu while it initializes.
+    await playerStats.load();
+    trackingService.start(); // Fire-and-forget — runs in background
 
     // Start the cursor ticker — drives gesture-cursor on UI screens.
     Duration? prevElapsed;
@@ -105,7 +112,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     setState(() => gameState = GameState.story);
   }
 
-  void _startGame() {
+  void _goToMap() {
+    setState(() => gameState = GameState.map);
+  }
+
+  void _onNodeSelected(MapNode node) {
+    // Stop old game instance to cancel any stale timers
+    game?.stopGame();
+
+    playerStats.setCurrentNode(node.id);
+    _initGameInstance();
+    game!.startLevel(node.startWave, node.endWave);
+
+    setState(() => gameState = GameState.playing);
+  }
+
+  void _initGameInstance() {
     game = FpvGame(
       onGestureDetected: (gesture) {
         if (activeGesture != gesture && mounted) {
@@ -139,18 +161,33 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           if (mounted) setState(() => gameState = GameState.victory);
         });
       },
+      onLevelComplete: (wave) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            // Unlocks new nodes based on current node's graph
+            final currentNode = MapGraph.nodes[playerStats.currentNodeId];
+            if (currentNode != null) {
+              playerStats.completeNode(currentNode.id, currentNode.unlocks);
+              // Final node has no unlocks — victory!
+              if (currentNode.unlocks.isEmpty) {
+                setState(() => gameState = GameState.victory);
+                return;
+              }
+            }
+            _goToMap();
+          }
+        });
+      },
       onWaveChanged: (wave) {},
       playerStats: playerStats,
       trackingService: trackingService,
     );
-
-    setState(() => gameState = GameState.playing);
   }
 
   void _restartGame() {
     _bigBrotherGameOver = false;
-    game?.restartGame();
-    setState(() => gameState = GameState.playing);
+    // Go back to map — player keeps map progress, just retries from same node
+    _goToMap();
   }
 
   void _backToMenu() {
@@ -181,7 +218,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               CircularProgressIndicator(color: Palette.fireGold),
               SizedBox(height: 24),
               Text(
-                'PYROMANCER',
+                'THE GRID',
                 style: TextStyle(
                   color: Palette.fireGold,
                   fontFamily: 'monospace',
@@ -240,8 +277,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       return GestureCursorLayer(
         controller: _cursorController,
         child: TutorialScreen(
-          onComplete: _startGame,
+          onComplete: () {
+            _goToMap();
+          },
           controller: _cursorController,
+        ),
+      );
+    }
+
+    // ── Map Screen ───────────────────────────────────────────────────
+    if (gameState == GameState.map) {
+      return GestureCursorLayer(
+        controller: _cursorController,
+        child: MapScreen(
+          playerStats: playerStats,
+          cursorController: _cursorController,
+          onNodeSelected: _onNodeSelected,
         ),
       );
     }
