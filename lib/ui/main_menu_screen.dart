@@ -6,7 +6,7 @@ import '../models/gesture_cursor_controller.dart';
 import 'gesture_cursor_overlay.dart';
 import 'glitch_text.dart';
 
-/// Epic animated main menu screen with fire particles, glowing title, and gesture reference.
+/// Animated main menu with surveillance terminal aesthetics.
 class MainMenuScreen extends StatefulWidget {
   final VoidCallback onPlayPressed;
   final VoidCallback onHowToPlay;
@@ -98,7 +98,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFF040808), Color(0xFF0A0F0F), Color(0xFF180808)],
+              colors: [Color(0xFF030707), Color(0xFF060D0D), Color(0xFF001208)],
               stops: [0.0, 0.55, 1.0],
             ),
           ),
@@ -110,7 +110,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
           child: const SizedBox.expand(),
         ),
 
-        // Bottom fire gradient
+        // Bottom signal glow
         Positioned(
           bottom: 0,
           left: 0,
@@ -122,7 +122,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
-                  colors: [Color(0x88CC3300), Colors.transparent],
+                  colors: [Color(0x6633CC66), Colors.transparent],
                 ),
               ),
             ),
@@ -175,7 +175,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                           Text(
                             'THE EYE',
                             style: TextStyle(
-                              color: Palette.fireWhite,
+                              color: const Color(0xFFB8FFC8),
                               fontFamily: 'monospace',
                               fontSize: 56,
                               fontWeight: FontWeight.w900,
@@ -183,22 +183,22 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                               height: 0.9,
                               shadows: [
                                 Shadow(
-                                  blurRadius: 30 * glow,
-                                  color: Palette.fireDeep.withValues(
-                                    alpha: 0.9 * glow,
-                                  ),
+                                  blurRadius: 22 * glow,
+                                  color: const Color(
+                                    0xFF44FF44,
+                                  ).withValues(alpha: 0.8 * glow),
                                 ),
                                 Shadow(
-                                  blurRadius: 60 * glow,
-                                  color: Palette.fireMid.withValues(
-                                    alpha: 0.5 * glow,
-                                  ),
+                                  blurRadius: 58 * glow,
+                                  color: const Color(
+                                    0xFF22AA66,
+                                  ).withValues(alpha: 0.45 * glow),
                                 ),
                                 Shadow(
-                                  blurRadius: 100 * glow,
-                                  color: Palette.fireGold.withValues(
-                                    alpha: 0.3 * glow,
-                                  ),
+                                  blurRadius: 92 * glow,
+                                  color: const Color(
+                                    0xFF114422,
+                                  ).withValues(alpha: 0.25 * glow),
                                 ),
                               ],
                             ),
@@ -206,7 +206,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                           Text(
                             'PROTOCOL',
                             style: TextStyle(
-                              color: Palette.fireGold,
+                              color: Palette.fireMid,
                               fontFamily: 'monospace',
                               fontSize: 56,
                               fontWeight: FontWeight.w900,
@@ -215,14 +215,14 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                               shadows: [
                                 Shadow(
                                   blurRadius: 30 * glow,
-                                  color: Palette.fireDeep.withValues(
-                                    alpha: 0.9 * glow,
-                                  ),
+                                  color: const Color(
+                                    0xFF3BBB72,
+                                  ).withValues(alpha: 0.75 * glow),
                                 ),
                                 Shadow(
                                   blurRadius: 80 * glow,
-                                  color: Palette.fireGold.withValues(
-                                    alpha: 0.6 * glow,
+                                  color: Palette.fireMid.withValues(
+                                    alpha: 0.5 * glow,
                                   ),
                                 ),
                               ],
@@ -247,7 +247,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                             gradient: LinearGradient(
                               colors: [
                                 Colors.transparent,
-                                Palette.fireGold,
+                                Color(0xFF44FF44),
                                 Colors.transparent,
                               ],
                             ),
@@ -258,7 +258,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                           color: const Color(0xFF0A0F0F),
                           child: const Icon(
                             Icons.remove_red_eye,
-                            color: Palette.fireGold,
+                            color: Color(0xFF44FF44),
                             size: 16,
                           ),
                         ),
@@ -271,7 +271,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                   const Text(
                     '"SNAP YOUR FINGERS. RESIST THEM ALL."',
                     style: TextStyle(
-                      color: Palette.uiGrey,
+                      color: Color(0xFF4D7C5A),
                       fontFamily: 'monospace',
                       fontSize: 11,
                       letterSpacing: 2.0,
@@ -287,7 +287,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                     child: _MenuButton(
                       label: 'ENTER THE GRID',
                       icon: Icons.play_arrow,
-                      color: Palette.fireGold,
+                      color: const Color(0xFF44FF44),
                       onTap: widget.onPlayPressed,
                       pulse: _pulseCtrl,
                       isPrimary: true,
@@ -316,7 +316,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                         child: _MenuButton(
                           label: 'HOW TO PLAY',
                           icon: Icons.help_outline,
-                          color: Palette.fireMid,
+                          color: const Color(0xFF55AA88),
                           onTap: widget.onHowToPlay,
                           pulse: null,
                           isPrimary: false,
@@ -335,7 +335,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                   const Text(
                     'WEBCAM ACTIVE — BIG BROTHER IS WATCHING  •  OR USE MOUSE',
                     style: TextStyle(
-                      color: Color(0xFF335533),
+                      color: Color(0xFF2F6A45),
                       fontFamily: 'monospace',
                       fontSize: 9,
                       letterSpacing: 2.0,
@@ -435,7 +435,7 @@ class _MenuButtonState extends State<_MenuButton> {
               if (widget.icon != null) ...[
                 Icon(
                   widget.icon,
-                  color: _hovered ? Palette.fireWhite : widget.color,
+                  color: _hovered ? Palette.uiWhite : widget.color,
                   size: widget.isPrimary ? 22 : 18,
                 ),
                 const SizedBox(width: 10),
@@ -443,19 +443,19 @@ class _MenuButtonState extends State<_MenuButton> {
               Text(
                 widget.label,
                 style: TextStyle(
-                  color: _hovered ? Palette.fireWhite : widget.color,
+                  color: _hovered ? Palette.uiWhite : widget.color,
                   fontFamily: 'monospace',
                   fontSize: widget.isPrimary ? 20 : 16,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 4.0,
-              shadows: _hovered
-                  ? [
-                      Shadow(
-                        blurRadius: 12,
-                        color: widget.color.withValues(alpha: 0.8),
-                      ),
-                    ]
-                  : null,
+                  shadows: _hovered
+                      ? [
+                          Shadow(
+                            blurRadius: 12,
+                            color: widget.color.withValues(alpha: 0.8),
+                          ),
+                        ]
+                      : null,
                 ),
               ),
             ],
@@ -505,7 +505,7 @@ class _GestureReference extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xBB050A0A),
         border: Border.all(
-          color: Palette.fireMid.withValues(alpha: 0.25),
+          color: const Color(0xFF44FF44).withValues(alpha: 0.25),
           width: 1,
         ),
       ),
@@ -517,7 +517,7 @@ class _GestureReference extends StatelessWidget {
               Container(
                 width: 1,
                 height: 36,
-                color: Palette.fireMid.withValues(alpha: 0.2),
+                color: const Color(0xFF44FF44).withValues(alpha: 0.2),
                 margin: const EdgeInsets.symmetric(horizontal: 16),
               ),
             _GestureChip(
@@ -566,7 +566,7 @@ class _GestureChip extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════
-// Fire Particle System
+// Signal Particle System
 // ══════════════════════════════════════════
 class _FireParticle {
   double x;
@@ -590,10 +590,10 @@ class _FireParticle {
   });
 
   static const List<Color> _colors = [
-    Palette.fireDeep,
+    Color(0xFF226644),
+    Color(0xFF44FF88),
+    Color(0xFF44DDFF),
     Palette.fireMid,
-    Palette.fireGold,
-    Palette.fireBright,
   ];
 
   factory _FireParticle.random(Random rng, {bool randomizeY = false}) {

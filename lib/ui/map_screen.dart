@@ -525,16 +525,30 @@ class _MapBackgroundPainter extends CustomPainter {
       );
     }
 
-    // Draw 3D pink buildings
-    final seedOffsetX = (cameraOffset.dx / logicalGridSpacing).floor();
-    final seedOffsetY = (cameraOffset.dy / logicalGridSpacing).floor();
+    // Draw 3D pink buildings.
+    // Keep coverage uniform, but leave a relatively small buffer so building
+    // pop-in is still visible at the edges when the camera scrolls.
+    const offscreenMarginWorld = 80.0;
+    const drawMarginPx = 40.0;
+    const spawnBandPx = 240.0;
+    final viewMinX =
+        cameraOffset.dx - (centerScreen.dx / zoom) - offscreenMarginWorld;
+    final viewMaxX =
+        cameraOffset.dx + (centerScreen.dx / zoom) + offscreenMarginWorld;
+    final viewMinY =
+        cameraOffset.dy - (centerScreen.dy / zoom) - offscreenMarginWorld;
+    final viewMaxY =
+        cameraOffset.dy + (centerScreen.dy / zoom) + offscreenMarginWorld;
 
-    for (int i = -2; i <= (size.width / gridSpacing).ceil() + 2; i++) {
-      for (int j = -2; j <= (size.height / gridSpacing).ceil() + 2; j++) {
-        final gridX = i + seedOffsetX;
-        final gridY = j + seedOffsetY;
+    final minGridX = (viewMinX / logicalGridSpacing).floor();
+    final maxGridX = (viewMaxX / logicalGridSpacing).ceil();
+    final minGridY = (viewMinY / logicalGridSpacing).floor();
+    final maxGridY = (viewMaxY / logicalGridSpacing).ceil();
 
-        final rCell = Random(gridX.abs() * 1000 + gridY.abs());
+    for (int gridX = minGridX; gridX <= maxGridX; gridX++) {
+      for (int gridY = minGridY; gridY <= maxGridY; gridY++) {
+        final cellSeed = ((gridX * 73856093) ^ (gridY * 19349663)) & 0x7fffffff;
+        final rCell = Random(cellSeed);
         if (rCell.nextDouble() > 0.45) continue;
 
         final depth = 15.0 + rCell.nextDouble() * 45.0;
@@ -563,55 +577,112 @@ class _MapBackgroundPainter extends CustomPainter {
         final t2 = p2 + Offset(dx, dy) - Offset(0, depth * zoom);
         final t3 = p3 + Offset(dx, dy) - Offset(0, depth * zoom);
 
+        // Skip buildings far outside the screen but keep a light padded band
+        // so new buildings can still appear from any direction while panning.
+        final minX = min(
+          min(min(p0.dx, p1.dx), min(p2.dx, p3.dx)),
+          min(min(t0.dx, t1.dx), min(t2.dx, t3.dx)),
+        );
+        final maxX = max(
+          max(max(p0.dx, p1.dx), max(p2.dx, p3.dx)),
+          max(max(t0.dx, t1.dx), max(t2.dx, t3.dx)),
+        );
+        final minY = min(
+          min(min(p0.dy, p1.dy), min(p2.dy, p3.dy)),
+          min(min(t0.dy, t1.dy), min(t2.dy, t3.dy)),
+        );
+        final maxY = max(
+          max(max(p0.dy, p1.dy), max(p2.dy, p3.dy)),
+          max(max(t0.dy, t1.dy), max(t2.dy, t3.dy)),
+        );
+
+        if (maxX < -drawMarginPx ||
+            minX > size.width + drawMarginPx ||
+            maxY < -drawMarginPx ||
+            minY > size.height + drawMarginPx) {
+          continue;
+        }
+
+        // Make edge entry visibly "spawn" as you pan in any direction.
+        final center = Offset(
+          (p0.dx + p1.dx + p2.dx + p3.dx) / 4,
+          (p0.dy + p1.dy + p2.dy + p3.dy) / 4,
+        );
+        final edgeDistance = min(
+          min(center.dx, size.width - center.dx),
+          min(center.dy, size.height - center.dy),
+        );
+        final spawnProgress = (edgeDistance / spawnBandPx).clamp(0.0, 1.0);
+        if (spawnProgress <= 0.0) continue;
+        final eased = pow(spawnProgress, 1.3).toDouble();
+        final spawnScale = 0.45 + 0.55 * eased;
+
+        Offset _scaleFrom(Offset point) =>
+            center + (point - center) * spawnScale;
+
+        final sp0 = _scaleFrom(p0);
+        final sp1 = _scaleFrom(p1);
+        final sp2 = _scaleFrom(p2);
+        final sp3 = _scaleFrom(p3);
+        final st0 = _scaleFrom(t0);
+        final st1 = _scaleFrom(t1);
+        final st2 = _scaleFrom(t2);
+        final st3 = _scaleFrom(t3);
+
         final colorValue = 0.3 + rCell.nextDouble() * 0.4;
-        final baseColor = Colors.pinkAccent.withValues(alpha: colorValue * 0.5);
-        final topColor = Colors.pinkAccent.withValues(alpha: colorValue);
+        final alphaMul = 0.15 + 0.85 * eased;
+        final baseColor = Colors.pinkAccent.withValues(
+          alpha: colorValue * 0.5 * alphaMul,
+        );
+        final topColor = Colors.pinkAccent.withValues(
+          alpha: colorValue * alphaMul,
+        );
         final sideColor = Colors.pinkAccent.shade400.withValues(
-          alpha: colorValue * 0.7,
+          alpha: colorValue * 0.7 * alphaMul,
         );
 
         if (dx > 0) {
           final leftPath = Path()
-            ..moveTo(p0.dx, p0.dy)
-            ..lineTo(t0.dx, t0.dy)
-            ..lineTo(t3.dx, t3.dy)
-            ..lineTo(p3.dx, p3.dy)
+            ..moveTo(sp0.dx, sp0.dy)
+            ..lineTo(st0.dx, st0.dy)
+            ..lineTo(st3.dx, st3.dy)
+            ..lineTo(sp3.dx, sp3.dy)
             ..close();
           canvas.drawPath(leftPath, Paint()..color = sideColor);
         } else {
           final rightPath = Path()
-            ..moveTo(p1.dx, p1.dy)
-            ..lineTo(t1.dx, t1.dy)
-            ..lineTo(t2.dx, t2.dy)
-            ..lineTo(p2.dx, p2.dy)
+            ..moveTo(sp1.dx, sp1.dy)
+            ..lineTo(st1.dx, st1.dy)
+            ..lineTo(st2.dx, st2.dy)
+            ..lineTo(sp2.dx, sp2.dy)
             ..close();
           canvas.drawPath(rightPath, Paint()..color = sideColor);
         }
 
         if (dy > 0) {
           final topFacePath = Path()
-            ..moveTo(p0.dx, p0.dy)
-            ..lineTo(p1.dx, p1.dy)
-            ..lineTo(t1.dx, t1.dy)
-            ..lineTo(t0.dx, t0.dy)
+            ..moveTo(sp0.dx, sp0.dy)
+            ..lineTo(sp1.dx, sp1.dy)
+            ..lineTo(st1.dx, st1.dy)
+            ..lineTo(st0.dx, st0.dy)
             ..close();
           canvas.drawPath(topFacePath, Paint()..color = baseColor);
         } else {
           final bottomFacePath = Path()
-            ..moveTo(p3.dx, p3.dy)
-            ..lineTo(p2.dx, p2.dy)
-            ..lineTo(t2.dx, t2.dy)
-            ..lineTo(t3.dx, t3.dy)
+            ..moveTo(sp3.dx, sp3.dy)
+            ..lineTo(sp2.dx, sp2.dy)
+            ..lineTo(st2.dx, st2.dy)
+            ..lineTo(st3.dx, st3.dy)
             ..close();
           canvas.drawPath(bottomFacePath, Paint()..color = baseColor);
         }
 
         // Top face
         final topPath = Path()
-          ..moveTo(t0.dx, t0.dy)
-          ..lineTo(t1.dx, t1.dy)
-          ..lineTo(t2.dx, t2.dy)
-          ..lineTo(t3.dx, t3.dy)
+          ..moveTo(st0.dx, st0.dy)
+          ..lineTo(st1.dx, st1.dy)
+          ..lineTo(st2.dx, st2.dy)
+          ..lineTo(st3.dx, st3.dy)
           ..close();
         canvas.drawPath(topPath, Paint()..color = topColor);
 
@@ -619,11 +690,11 @@ class _MapBackgroundPainter extends CustomPainter {
         if (rCell.nextDouble() > 0.3) {
           final windowPaint = Paint()
             ..color = Colors.cyanAccent.withValues(
-              alpha: 0.2 + 0.3 * sin(time * 1.5 + gridX * 0.7),
+              alpha: (0.2 + 0.3 * sin(time * 1.5 + gridX * 0.7)) * alphaMul,
             );
           final faceCenter = Offset(
-            (t0.dx + t1.dx + t2.dx + t3.dx) / 4,
-            (t0.dy + t1.dy + t2.dy + t3.dy) / 4,
+            (st0.dx + st1.dx + st2.dx + st3.dx) / 4,
+            (st0.dy + st1.dy + st2.dy + st3.dy) / 4,
           );
           canvas.drawCircle(faceCenter, 1.5 * zoom, windowPaint);
         }
