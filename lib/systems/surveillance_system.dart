@@ -31,25 +31,25 @@ class SurveillanceSystem {
   static const double gameOverDuration = 5.0;
 
   // ── Tuning constants ──
-  static const double actionFireGain = 0.08;
-  static const double rapidFireMultiplier = 0.55;
-  static const double rapidFireWindow = 2.2;
-  static const double actionMinInterval = 0.14;
-  static const double baseDecayRate = 0.17;
-  static const double greenDecayRate = 0.26;
+  static const double actionFireGain = 0.12;
+  static const double rapidFireMultiplier = 0.75;
+  static const double rapidFireWindow = 2.8;
+  static const double actionMinInterval = 0.10;
+  static const double baseDecayRate = 0.14;
+  static const double greenDecayRate = 0.22;
 
   // ── Movement signal shaping ──
   // Ignore near-zero jitter and hard-reject impossible one-frame spikes.
   static const double _velocityNoiseFloor = 0.00005;
-  static const double _velocityCautionStart = 0.00055;
+  static const double _velocityCautionStart = 0.00040;
   static const double _velocityDangerStart = 0.0018;
   static const double _velocityGlitchCutoff = 0.035;
   static const double _velocityEmaFast = 0.35;
   static const double _velocityEmaSlow = 0.16;
 
-  static const double _movementEvidenceRise = 1.70;
+  static const double _movementEvidenceRise = 2.20;
   static const double _movementEvidenceFall = 1.25;
-  static const double _maxMovementGainPerSecond = 0.30;
+  static const double _maxMovementGainPerSecond = 0.40;
   static const double _maxGainPerFrame = 0.040;
 
   double _velocityEma = 0.0;
