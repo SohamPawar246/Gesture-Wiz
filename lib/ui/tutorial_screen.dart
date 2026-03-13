@@ -403,8 +403,8 @@ class _TutorialScreenState extends State<TutorialScreen>
               animation: ctrl,
               builder: (_, child) => Transform.translate(
                 offset: Offset(
-                  (ctrl.faceX - 0.5) * 65.0,
-                  (ctrl.faceY - 0.5) * 35.0,
+                  (ctrl.faceX - 0.5) * ctrl.parallaxH,
+                  (ctrl.faceY - 0.5) * ctrl.parallaxV,
                 ),
                 child: child,
               ),

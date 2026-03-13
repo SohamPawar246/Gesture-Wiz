@@ -30,6 +30,12 @@ class GestureCursorController extends ChangeNotifier {
   double faceX = 0.5;
   double faceY = 0.5;
 
+  // ── Configurable sensitivity (driven by SettingsManager) ───────────
+  double handAlpha = 0.65;
+  double faceAlpha = 0.55;
+  double parallaxH = 65.0;
+  double parallaxV = 35.0;
+
   // ── Dwell state — managed cooperatively with GestureTapTargets ──────
   /// 0–1 fill of the dwell ring drawn on the cursor.
   double dwellProgress = 0.0;
@@ -64,16 +70,13 @@ class GestureCursorController extends ChangeNotifier {
 
       // Index fingertip = MediaPipe landmark 8.
       final tip = landmarks.length > 8 ? landmarks[8] : landmarks[0];
-      _smoothX += (tip.x - _smoothX) * 0.65;
-      _smoothY += (tip.y - _smoothY) * 0.65;
+      _smoothX += (tip.x - _smoothX) * handAlpha;
+      _smoothY += (tip.y - _smoothY) * handAlpha;
       posX = _smoothX.clamp(0.0, 1.0);
       posY = _smoothY.clamp(0.0, 1.0);
 
       final raw = _recognizer.recognize(landmarks);
-      gestureType = _stateMachine.processFrame(
-        raw,
-        dt: dt,
-      );
+      gestureType = _stateMachine.processFrame(raw, dt: dt);
 
       _prevPinching = isPinching;
       isPinching = gestureType == GestureType.pinch;
@@ -95,8 +98,8 @@ class GestureCursorController extends ChangeNotifier {
     // Face tracking is independent of hand visibility — update every frame.
     final face = service.facePosition;
     if (face != null) {
-      faceX += (face.x - faceX) * 0.55;
-      faceY += (face.y - faceY) * 0.55;
+      faceX += (face.x - faceX) * faceAlpha;
+      faceY += (face.y - faceY) * faceAlpha;
     } else {
       faceX += (0.5 - faceX) * dt * 2.0;
       faceY += (0.5 - faceY) * dt * 2.0;

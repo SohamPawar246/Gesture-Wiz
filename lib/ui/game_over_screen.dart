@@ -343,8 +343,8 @@ class _GameOverScreenState extends State<GameOverScreen>
             animation: ctrl,
             builder: (_, child) => Transform.translate(
               offset: Offset(
-                (ctrl.faceX - 0.5) * 65.0,
-                (ctrl.faceY - 0.5) * 35.0,
+                (ctrl.faceX - 0.5) * ctrl.parallaxH,
+                (ctrl.faceY - 0.5) * ctrl.parallaxV,
               ),
               child: child,
             ),
@@ -444,7 +444,11 @@ class _ActionButtonState extends State<_ActionButton> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (widget.icon != null) ...[
-                  Icon(widget.icon, color: _hovered ? Palette.fireWhite : widget.color, size: 18),
+                  Icon(
+                    widget.icon,
+                    color: _hovered ? Palette.fireWhite : widget.color,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                 ],
                 Text(
@@ -454,9 +458,9 @@ class _ActionButtonState extends State<_ActionButton> {
                     fontFamily: 'monospace',
                     fontSize: 16,
                     fontWeight: FontWeight.w900,
-                letterSpacing: 4.0,
-              ),
-            ),
+                    letterSpacing: 4.0,
+                  ),
+                ),
               ],
             ),
           ),

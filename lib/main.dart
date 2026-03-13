@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/foundation.dart';
 
 import 'ui/hud.dart';
 import 'ui/game_over_screen.dart';
@@ -11,6 +12,8 @@ import 'ui/main_menu_screen.dart';
 import 'ui/story_screen.dart';
 import 'ui/gesture_cursor_overlay.dart';
 import 'ui/map_screen.dart';
+import 'ui/settings_panel.dart';
+import 'ui/pixelation_wrapper.dart';
 import 'models/map_node.dart';
 import 'game/fpv_game.dart';
 import 'game/palette.dart';
@@ -22,6 +25,7 @@ import 'package:fpv_magic/systems/gesture/gesture_type.dart';
 import 'package:fpv_magic/models/player_stats.dart';
 import 'package:fpv_magic/systems/audio_manager.dart';
 import 'package:fpv_magic/systems/save_system.dart';
+import 'package:fpv_magic/systems/settings_manager.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,19 +68,34 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late final PlayerStats playerStats;
   late final TrackingService trackingService;
   late final GestureCursorController _cursorController;
+  late final SettingsManager _settings;
   Ticker? _cursorTicker;
   FpvGame? game;
 
   bool statsLoaded = false;
+  bool _showSettings = false;
   GameState gameState = GameState.epilepsyWarning;
   GestureType activeGesture = GestureType.none;
   bool _bigBrotherGameOver = false;
+  bool _audioUnlockedByUser = false;
+
+  void _retryWebUiMusicOnUserGesture() {
+    if (!kIsWeb || _audioUnlockedByUser) return;
+    _audioUnlockedByUser = true;
+    if (gameState == GameState.mainMenu || gameState == GameState.tutorial) {
+      AudioManager.playMenuTutorialMusic(volume: 1.0, forceRestart: true);
+    } else if (gameState == GameState.map) {
+      AudioManager.playMapMusic(volume: 1.0, forceRestart: true);
+    }
+  }
 
   void _syncUiMusicForState(GameState state) {
     if (state == GameState.mainMenu || state == GameState.tutorial) {
       AudioManager.playMenuTutorialMusic(volume: 1.0);
+    } else if (state == GameState.map) {
+      AudioManager.playMapMusic(volume: 1.0);
     } else {
-      AudioManager.stopMenuTutorialMusic();
+      AudioManager.stopUiMusic();
     }
   }
 
@@ -84,6 +103,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() {
       gameState = state;
+      _showSettings = false;
       if (bigBrotherGameOver != null) {
         _bigBrotherGameOver = bigBrotherGameOver;
       }
@@ -108,6 +128,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     // Don't block on trackingService — it loads the ML model which is slow.
     // The user sees the epilepsy warning + menu while it initializes.
     await Future.wait([playerStats.load(), AudioManager.init()]);
+    _settings = SettingsManager();
+    await _settings.load();
+    _applySettings();
+    _settings.addListener(_applySettings);
     trackingService.start(); // Fire-and-forget — runs in background
 
     // Start the cursor ticker — drives gesture-cursor on UI screens.
@@ -209,9 +233,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _setGameState(GameState.mainMenu);
   }
 
+  void _applySettings() {
+    _cursorController.handAlpha = _settings.handSensitivity;
+    _cursorController.faceAlpha = _settings.faceSmoothingAlpha;
+    _cursorController.parallaxH = _settings.parallaxH;
+    _cursorController.parallaxV = _settings.parallaxV;
+    AudioManager.setBgmMuted(_settings.bgmMuted);
+    AudioManager.setAllMuted(_settings.allMuted);
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
-    AudioManager.stopMenuTutorialMusic();
+    _settings.removeListener(_applySettings);
+    AudioManager.stopUiMusic();
     _cursorTicker?.stop();
     _cursorController.dispose();
     trackingService.dispose();
@@ -266,11 +301,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (gameState == GameState.mainMenu) {
       screenContent = GestureCursorLayer(
         controller: _cursorController,
-        child: MainMenuScreen(
-          controller: _cursorController,
-          onPlayPressed: _goToTutorial,
-          onHowToPlay: _goToTutorial,
-          onStory: _goToStory,
+        child: Stack(
+          children: [
+            MainMenuScreen(
+              controller: _cursorController,
+              onPlayPressed: _goToTutorial,
+              onHowToPlay: _goToTutorial,
+              onStory: _goToStory,
+              onSettings: () => setState(() => _showSettings = true),
+            ),
+            if (_showSettings)
+              SettingsPanel(
+                settings: _settings,
+                controller: _cursorController,
+                onClose: () => setState(() => _showSettings = false),
+              ),
+          ],
         ),
       );
     } else if (gameState == GameState.story) {
@@ -343,12 +389,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       );
     }
 
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 400),
-      transitionBuilder: (child, animation) {
-        return _CyberGlitchTransition(animation: animation, child: child);
-      },
-      child: KeyedSubtree(key: ValueKey(gameState), child: screenContent),
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _retryWebUiMusicOnUserGesture(),
+      child: PixelationWrapper(
+        level: _settings.pixelationLevel,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 400),
+          transitionBuilder: (child, animation) {
+            return _CyberGlitchTransition(animation: animation, child: child);
+          },
+          child: KeyedSubtree(key: ValueKey(gameState), child: screenContent),
+        ),
+      ),
     );
   }
 }

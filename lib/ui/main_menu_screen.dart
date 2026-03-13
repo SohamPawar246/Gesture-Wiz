@@ -11,6 +11,7 @@ class MainMenuScreen extends StatefulWidget {
   final VoidCallback onPlayPressed;
   final VoidCallback onHowToPlay;
   final VoidCallback onStory;
+  final VoidCallback? onSettings;
   final GestureCursorController? controller;
 
   const MainMenuScreen({
@@ -18,6 +19,7 @@ class MainMenuScreen extends StatefulWidget {
     required this.onPlayPressed,
     required this.onHowToPlay,
     required this.onStory,
+    this.onSettings,
     this.controller,
   });
 
@@ -322,6 +324,20 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                           isPrimary: false,
                         ),
                       ),
+                      if (widget.onSettings != null) ...[
+                        const SizedBox(width: 12),
+                        _gestureWrap(
+                          onTap: widget.onSettings!,
+                          child: _MenuButton(
+                            label: 'SETTINGS',
+                            icon: Icons.settings,
+                            color: const Color(0xFF55AA88),
+                            onTap: widget.onSettings!,
+                            pulse: null,
+                            isPrimary: false,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
 
@@ -356,8 +372,8 @@ class _MainMenuScreenState extends State<MainMenuScreen>
               animation: ctrl,
               builder: (_, child) => Transform.translate(
                 offset: Offset(
-                  (ctrl.faceX - 0.5) * 65.0,
-                  (ctrl.faceY - 0.5) * 35.0,
+                  (ctrl.faceX - 0.5) * ctrl.parallaxH,
+                  (ctrl.faceY - 0.5) * ctrl.parallaxV,
                 ),
                 child: child,
               ),
