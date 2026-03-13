@@ -50,21 +50,26 @@ class UdpService implements TrackingService {
   DateTime _lastReceived = DateTime(2000);
 
   /// Get smoothed landmarks for a specific hand (0 or 1)
+  @override
   List<Landmark>? getHandLandmarks(int handId) => _smoothedHands[handId];
 
   /// Convenience: get the first (primary) hand
   List<Landmark>? get latestLandmarks => _smoothedHands[0];
 
   /// Get smoothed face coordinate (normalized 0-1)
+  @override
   Vector2? get facePosition => _smoothedFace;
 
   /// Number of currently tracked hands
+  @override
   int get handCount => _smoothedHands.length;
 
   /// Returns true if we've received data within the last 500ms
+  @override
   bool get isConnected =>
       DateTime.now().difference(_lastReceived).inMilliseconds < 500;
 
+  @override
   Future<void> start() async {
     _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, _port);
     _socket!.listen((RawSocketEvent event) {
@@ -186,6 +191,7 @@ class UdpService implements TrackingService {
     return null;
   }
 
+  @override
   void dispose() {
     _socket?.close();
   }

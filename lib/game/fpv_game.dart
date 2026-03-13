@@ -324,7 +324,7 @@ class FpvGame extends FlameGame
 
     // --- Hand tracking (supports 2 hands) ---
     // Poll WebTrackingService if on web (it reads from JS each frame)
-    if (trackingService is dynamic && trackingService != null) {
+    if (trackingService != null) {
       try {
         (trackingService as dynamic).poll();
       } catch (_) {}

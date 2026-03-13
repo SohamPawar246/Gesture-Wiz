@@ -239,6 +239,7 @@ class _GestureTapTargetState extends State<GestureTapTarget>
 
   // Unique ID to coordinate with the controller's dwell slot
   late final int _myId;
+  bool _ownsDwellSlot = false;
 
   @override
   void initState() {
@@ -250,7 +251,10 @@ class _GestureTapTargetState extends State<GestureTapTarget>
   @override
   void dispose() {
     _ticker.dispose();
-    widget.controller.endDwell(_myId);
+    if (_ownsDwellSlot) {
+      widget.controller.endDwell(_myId);
+      _ownsDwellSlot = false;
+    }
     super.dispose();
   }
 
@@ -301,14 +305,18 @@ class _GestureTapTargetState extends State<GestureTapTarget>
 
     // Coordinate dwell display with controller
     if (inside) {
-      if (!_isHovered) widget.controller.startDwell(_myId);
+      if (!_ownsDwellSlot) {
+        widget.controller.startDwell(_myId);
+        _ownsDwellSlot = true;
+      }
       widget.controller.updateDwell(_myId, newDwell);
     } else {
-      if (_isHovered) {
+      if (_isHovered || _ownsDwellSlot) {
         // Cursor just left — immediately clear dwell and re-arm for next hover
         newDwell = 0.0;
         _hasFired = false;
         widget.controller.endDwell(_myId);
+        _ownsDwellSlot = false;
       }
     }
 
@@ -340,6 +348,12 @@ class _GestureTapTargetState extends State<GestureTapTarget>
 
   void _fire(double afterDwell) {
     _hasFired = true;
+    _dwell = afterDwell;
+    _isHovered = false;
+    if (_ownsDwellSlot) {
+      widget.controller.endDwell(_myId);
+      _ownsDwellSlot = false;
+    }
     _cooldown = 0.9;
     widget.controller.triggerGlobalCooldown(0.8);
     WidgetsBinding.instance.addPostFrameCallback((_) {

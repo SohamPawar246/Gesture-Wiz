@@ -28,8 +28,10 @@ window._mpFaceResult = null; // {x, y} face center (normalized)
 window._mpReady = false;
 
 // Big Brother detection level (set by Dart via js_interop, read by drawPreview)
-// 0.0 = green (safe), 0.4+ = yellow (caution), 0.7+ = red (danger)
+// 0.0 = green (safe), 0.30+ = yellow (caution), 0.62+ = red (danger)
 window._bbDetectionLevel = 0.0;
+const BB_YELLOW_THRESHOLD = 0.3;
+const BB_RED_THRESHOLD = 0.62;
 
 // Face smoothing (lightweight EMA for responsiveness)
 let _smoothFaceX = 0.5;
@@ -187,32 +189,80 @@ function predictLoop() {
 }
 
 function getBBColor(level) {
-  if (level < 0.35) {
+  if (level < BB_YELLOW_THRESHOLD) {
     return {
-      stroke: "#00FF55",
-      fill: "rgba(0, 255, 85, ",
-      glow: "rgba(0, 180, 40, ",
+      stroke: "#00f06a",
+      fill: "rgba(0, 240, 106, ",
+      glow: "rgba(0, 210, 110, ",
+      zone: "GREEN",
     };
-  } else if (level < 0.72) {
-    const t = (level - 0.35) / 0.37;
-    const r = Math.round(255 * t);
-    const g = Math.round(255 - 55 * t);
+  } else if (level < BB_RED_THRESHOLD) {
+    const t =
+      (level - BB_YELLOW_THRESHOLD) / (BB_RED_THRESHOLD - BB_YELLOW_THRESHOLD);
+    const r = Math.round(255 * (0.85 + 0.15 * t));
+    const g = Math.round(230 - 90 * t);
     return {
       stroke: "rgb(" + r + ", " + g + ", 0)",
       fill: "rgba(" + r + ", " + g + ", 0, ",
       glow: "rgba(" + r + ", " + g + ", 0, ",
+      zone: "YELLOW",
     };
   } else {
-    const t = Math.min((level - 0.72) / 0.28, 1.0);
-    const pulse = 0.7 + 0.3 * Math.sin(performance.now() / 150);
+    const t = Math.min(
+      (level - BB_RED_THRESHOLD) / (1.0 - BB_RED_THRESHOLD),
+      1.0,
+    );
+    const pulse = 0.75 + 0.25 * Math.sin(performance.now() / 120);
     const r = 255;
-    const g = Math.round(200 * (1 - t) * pulse);
+    const g = Math.round(120 * (1 - t) * pulse);
     return {
       stroke: "rgb(" + r + ", " + g + ", 0)",
       fill: "rgba(" + r + ", " + g + ", 0, ",
-      glow: "rgba(255, 0, 0, ",
+      glow: "rgba(255, 32, 0, ",
+      zone: "RED",
     };
   }
+}
+
+function drawDetectionMeter(ctx, width, level, colors) {
+  const meterX = 8;
+  const meterY = 20;
+  const meterW = width - 16;
+  const meterH = 12;
+
+  ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  ctx.fillRect(meterX, meterY, meterW, meterH);
+
+  const fillW = Math.max(
+    2,
+    Math.floor(meterW * Math.min(Math.max(level, 0), 1)),
+  );
+  ctx.fillStyle = colors.fill + "0.92)";
+  ctx.fillRect(meterX + 1, meterY + 1, Math.max(0, fillW - 2), meterH - 2);
+
+  // Threshold markers
+  const yX = meterX + meterW * BB_YELLOW_THRESHOLD;
+  const rX = meterX + meterW * BB_RED_THRESHOLD;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(yX, meterY - 1);
+  ctx.lineTo(yX, meterY + meterH + 1);
+  ctx.moveTo(rX, meterY - 1);
+  ctx.lineTo(rX, meterY + meterH + 1);
+  ctx.stroke();
+
+  ctx.strokeStyle = colors.stroke;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(meterX, meterY, meterW, meterH);
+
+  let statusText = "SAFE";
+  if (colors.zone === "YELLOW") statusText = "ALERT";
+  if (colors.zone === "RED") statusText = "CRITICAL";
+
+  ctx.font = "bold 8px monospace";
+  ctx.fillStyle = colors.stroke;
+  ctx.fillText("THREAT " + statusText, meterX, meterY - 5);
 }
 
 function drawPreview(rawHands, faceDetections) {
@@ -286,6 +336,8 @@ function drawPreview(rawHands, faceDetections) {
   const bbLevel = window._bbDetectionLevel || 0;
   const bbColors = getBBColor(bbLevel);
 
+  drawDetectionMeter(previewCtx, cw, bbLevel, bbColors);
+
   // Draw face bounding box — "TARGET ACQUIRED" style
   if (faceDetections && faceDetections.length > 0) {
     const det = faceDetections[0];
@@ -340,22 +392,36 @@ function drawPreview(rawHands, faceDetections) {
 
   // --- Update canvas border and label based on detection level ---
   if (previewCanvas) {
+    const borderWidth =
+      bbLevel >= BB_RED_THRESHOLD ? 4 : bbLevel >= BB_YELLOW_THRESHOLD ? 3 : 2;
+    previewCanvas.style.borderWidth = borderWidth + "px";
     previewCanvas.style.borderColor = bbColors.stroke;
+    const pulse =
+      bbLevel >= BB_RED_THRESHOLD
+        ? 0.55 + 0.35 * Math.sin(performance.now() / 120)
+        : 0.35;
     previewCanvas.style.boxShadow =
-      "0 0 18px " + bbColors.glow + "0.35), inset 0 0 10px rgba(0,0,0,0.6)";
+      "0 0 22px " +
+      bbColors.glow +
+      pulse +
+      "), inset 0 0 12px rgba(0,0,0,0.65)";
   }
   const bbLabel = document.getElementById("bb-label");
   if (bbLabel) {
-    if (bbLevel >= 0.72) {
-      bbLabel.textContent = "\u26A0 BIG BROTHER NOTICES YOU \u26A0";
+    bbLabel.style.textShadow = "0 0 8px " + bbColors.glow + "0.7)";
+    bbLabel.style.letterSpacing = bbLevel >= BB_RED_THRESHOLD ? "2.4px" : "2px";
+    bbLabel.style.fontSize = bbLevel >= BB_YELLOW_THRESHOLD ? "10px" : "9px";
+
+    if (bbLevel >= BB_RED_THRESHOLD) {
+      bbLabel.textContent = "BIG BROTHER NOTICES YOU";
       bbLabel.style.color = bbColors.stroke;
       bbLabel.style.fontWeight = "bold";
-    } else if (bbLevel >= 0.35) {
-      bbLabel.textContent = "\uD83D\uDC41 SUSPICIOUS ACTIVITY \uD83D\uDC41";
+    } else if (bbLevel >= BB_YELLOW_THRESHOLD) {
+      bbLabel.textContent = "SUSPICIOUS ACTIVITY";
       bbLabel.style.color = bbColors.stroke;
-      bbLabel.style.fontWeight = "normal";
+      bbLabel.style.fontWeight = "600";
     } else {
-      bbLabel.textContent = "\uD83D\uDC41 BIG BROTHER IS WATCHING \uD83D\uDC41";
+      bbLabel.textContent = "BIG BROTHER IS WATCHING";
       bbLabel.style.color = "rgba(0, 200, 60, 0.75)";
       bbLabel.style.fontWeight = "normal";
     }

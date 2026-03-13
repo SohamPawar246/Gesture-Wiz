@@ -6,9 +6,15 @@ import 'gesture_cursor_overlay.dart';
 
 class TutorialScreen extends StatefulWidget {
   final VoidCallback onComplete;
+  final VoidCallback? onBackToMenu;
   final GestureCursorController? controller;
 
-  const TutorialScreen({super.key, required this.onComplete, this.controller});
+  const TutorialScreen({
+    super.key,
+    required this.onComplete,
+    this.onBackToMenu,
+    this.controller,
+  });
 
   @override
   State<TutorialScreen> createState() => _TutorialScreenState();
@@ -22,11 +28,19 @@ class _TutorialScreenState extends State<TutorialScreen>
 
   static const List<_TutorialStep> _steps = [
     _TutorialStep(
+      icon: Icons.shield,
+      title: 'OPEN PALM',
+      subtitle: 'REST + BLOCK',
+      description:
+          'Keep OPEN PALM as your\ndefault rest stance.\nOpen palm also blocks incoming hits.',
+      color: Color(0xFF44DDFF),
+    ),
+    _TutorialStep(
       icon: Icons.local_fire_department,
       title: 'POINT',
-      subtitle: 'FIRE BOLT',
+      subtitle: 'FIREBALL CHAIN',
       description:
-          'Extend your INDEX FINGER\nto cast a fire bolt.\nTargets the nearest enemy.',
+          'From OPEN PALM, switch to POINT\nfor Fireball 1.\nReturn to OPEN PALM, then POINT again for Fireball 2.',
       color: Color(0xFFFF6622),
     ),
     _TutorialStep(
@@ -35,13 +49,6 @@ class _TutorialScreenState extends State<TutorialScreen>
       subtitle: 'FORCE PUSH',
       description: 'Clench your fist\nto release a powerful\nAoE force wave.',
       color: Color(0xFF9944FF),
-    ),
-    _TutorialStep(
-      icon: Icons.shield,
-      title: 'OPEN PALM',
-      subtitle: 'WARD SHIELD',
-      description: 'Hold your palm open\nto block incoming\nenemy spells.',
-      color: Color(0xFF44DDFF),
     ),
     _TutorialStep(
       icon: Icons.flash_on,
@@ -141,16 +148,33 @@ class _TutorialScreenState extends State<TutorialScreen>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'NIGHT CITY',
-                      style: TextStyle(
-                        color: Palette.fireGold,
-                        fontFamily: 'monospace',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 3,
+                    if (widget.onBackToMenu != null)
+                      _gestureWrap(
+                        onTap: widget.onBackToMenu!,
+                        child: GestureDetector(
+                          onTap: widget.onBackToMenu,
+                          child: const Text(
+                            '← MENU',
+                            style: TextStyle(
+                              color: Palette.uiGrey,
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      const Text(
+                        'NIGHT CITY',
+                        style: TextStyle(
+                          color: Palette.fireGold,
+                          fontFamily: 'monospace',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 3,
+                        ),
                       ),
-                    ),
                     _gestureWrap(
                       onTap: _skip,
                       child: GestureDetector(

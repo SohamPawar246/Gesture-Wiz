@@ -1,6 +1,7 @@
 /// Conditional import stub for creating the tracking service.
 /// On web: returns WebTrackingService
 /// On desktop: returns UdpService
+library;
 
 import 'tracking_service.dart';
 

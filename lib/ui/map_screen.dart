@@ -12,12 +12,14 @@ class MapScreen extends StatefulWidget {
   final PlayerStats playerStats;
   final GestureCursorController cursorController;
   final void Function(MapNode node) onNodeSelected;
+  final VoidCallback onBackToMenu;
 
   const MapScreen({
     super.key,
     required this.playerStats,
     required this.cursorController,
     required this.onNodeSelected,
+    required this.onBackToMenu,
   });
 
   @override
@@ -31,7 +33,7 @@ class _MapScreenState extends State<MapScreen>
 
   // The center logical position the camera is looking at
   Offset _cameraOffset = const Offset(1000, 1000);
-  double _zoom = 0.8; // Base zoom
+  final double _zoom = 0.8; // Base zoom
 
   final double _mapWidth = 2000;
   final double _mapHeight = 2000;
@@ -39,6 +41,9 @@ class _MapScreenState extends State<MapScreen>
   // ── Scrolling momentum ──────────────────────────────────────────
   Offset _velocity = Offset.zero;
   static const double _friction = 3.5; // velocity decay per second
+  static const double _edgePanGraceSeconds = 0.45;
+  Offset _stickyEdgePan = Offset.zero;
+  double _edgePanGraceRemaining = 0.0;
 
   // ── Touch drag support ──────────────────────────────────────────
   Offset? _dragStartCamera;
@@ -96,32 +101,31 @@ class _MapScreenState extends State<MapScreen>
 
     // ── Gesture cursor edge-panning ───────────────────────────────
     Offset edgePan = Offset.zero;
-    if (widget.cursorController.isVisible && !_isDragging) {
-      final cx = widget.cursorController.posX;
-      final cy = widget.cursorController.posY;
+    if (!_isDragging) {
+      if (widget.cursorController.isVisible) {
+        edgePan = _computeEdgePan(
+          widget.cursorController.posX,
+          widget.cursorController.posY,
+        );
 
-      double panX = 0;
-      double panY = 0;
-      const edgeMargin = 0.12;
-      const maxPanSpeed = 700.0;
+        if (edgePan.distance > 0.01) {
+          _stickyEdgePan = edgePan;
+          _edgePanGraceRemaining = _edgePanGraceSeconds;
+        } else {
+          _stickyEdgePan = Offset.zero;
+          _edgePanGraceRemaining = 0.0;
+        }
+      } else if (_edgePanGraceRemaining > 0.0) {
+        _edgePanGraceRemaining = max(0.0, _edgePanGraceRemaining - dt);
+        final factor = _edgePanGraceSeconds == 0
+            ? 0.0
+            : _edgePanGraceRemaining / _edgePanGraceSeconds;
+        edgePan = _stickyEdgePan * factor;
 
-      if (cx < edgeMargin) {
-        final t = 1 - cx / edgeMargin;
-        panX = -maxPanSpeed * t * t; // Quadratic easing for smoother feel
-      } else if (cx > 1 - edgeMargin) {
-        final t = 1 - (1 - cx) / edgeMargin;
-        panX = maxPanSpeed * t * t;
+        if (_edgePanGraceRemaining == 0.0) {
+          _stickyEdgePan = Offset.zero;
+        }
       }
-
-      if (cy < edgeMargin) {
-        final t = 1 - cy / edgeMargin;
-        panY = -maxPanSpeed * t * t;
-      } else if (cy > 1 - edgeMargin) {
-        final t = 1 - (1 - cy) / edgeMargin;
-        panY = maxPanSpeed * t * t;
-      }
-
-      edgePan = Offset(panX, panY);
     }
 
     // ── Apply momentum + edge pan ─────────────────────────────────
@@ -163,6 +167,31 @@ class _MapScreenState extends State<MapScreen>
     _velocity = Offset.zero;
   }
 
+  Offset _computeEdgePan(double cx, double cy) {
+    double panX = 0;
+    double panY = 0;
+    const edgeMargin = 0.12;
+    const maxPanSpeed = 700.0;
+
+    if (cx < edgeMargin) {
+      final t = 1 - cx / edgeMargin;
+      panX = -maxPanSpeed * t * t;
+    } else if (cx > 1 - edgeMargin) {
+      final t = 1 - (1 - cx) / edgeMargin;
+      panX = maxPanSpeed * t * t;
+    }
+
+    if (cy < edgeMargin) {
+      final t = 1 - cy / edgeMargin;
+      panY = -maxPanSpeed * t * t;
+    } else if (cy > 1 - edgeMargin) {
+      final t = 1 - (1 - cy) / edgeMargin;
+      panY = maxPanSpeed * t * t;
+    }
+
+    return Offset(panX, panY);
+  }
+
   void _onPanUpdate(DragUpdateDetails details) {
     if (_dragStartCamera == null || _dragStartPoint == null) return;
     final delta = details.localPosition - _dragStartPoint!;
@@ -196,6 +225,7 @@ class _MapScreenState extends State<MapScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onPanStart: _onPanStart,
         onPanUpdate: _onPanUpdate,
         onPanEnd: _onPanEnd,
@@ -315,6 +345,43 @@ class _MapScreenState extends State<MapScreen>
                     glitchIntensity: 0.3,
                   ),
                 ],
+              ),
+            ),
+
+            // 4b. Back to Menu button (top-right)
+            Positioned(
+              top: 40,
+              right: 24,
+              child: GestureTapTarget(
+                controller: widget.cursorController,
+                dwellSeconds: 1.2,
+                onTap: widget.onBackToMenu,
+                child: GestureDetector(
+                  onTap: widget.onBackToMenu,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      border: Border.all(
+                        color: Colors.cyanAccent.withValues(alpha: 0.45),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Text(
+                      '← MENU',
+                      style: TextStyle(
+                        color: Colors.cyanAccent,
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
 
@@ -617,17 +684,17 @@ class _MapBackgroundPainter extends CustomPainter {
         final eased = pow(spawnProgress, 1.3).toDouble();
         final spawnScale = 0.45 + 0.55 * eased;
 
-        Offset _scaleFrom(Offset point) =>
+        Offset scaleFrom(Offset point) =>
             center + (point - center) * spawnScale;
 
-        final sp0 = _scaleFrom(p0);
-        final sp1 = _scaleFrom(p1);
-        final sp2 = _scaleFrom(p2);
-        final sp3 = _scaleFrom(p3);
-        final st0 = _scaleFrom(t0);
-        final st1 = _scaleFrom(t1);
-        final st2 = _scaleFrom(t2);
-        final st3 = _scaleFrom(t3);
+        final sp0 = scaleFrom(p0);
+        final sp1 = scaleFrom(p1);
+        final sp2 = scaleFrom(p2);
+        final sp3 = scaleFrom(p3);
+        final st0 = scaleFrom(t0);
+        final st1 = scaleFrom(t1);
+        final st2 = scaleFrom(t2);
+        final st3 = scaleFrom(t3);
 
         final colorValue = 0.3 + rCell.nextDouble() * 0.4;
         final alphaMul = 0.15 + 0.85 * eased;

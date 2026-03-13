@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:math';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
@@ -25,27 +26,39 @@ class SurveillanceSystem {
   bool get triggered => _triggered;
 
   // ── Thresholds ──
-  static const double yellowThreshold = 0.28;
-  static const double redThreshold = 0.60;
-  static const double gameOverDuration = 4.5;
+  static const double yellowThreshold = 0.30;
+  static const double redThreshold = 0.62;
+  static const double gameOverDuration = 5.0;
 
   // ── Tuning constants ──
-  static const double velocityGain = 8.0;
-  static const double actionFireGain = 0.10;
-  static const double rapidFireMultiplier = 0.9;
-  static const double rapidFireWindow = 3.0;
-  static const double baseDecayRate = 0.05;
-  static const double greenDecayRate = 0.07;
+  static const double actionFireGain = 0.08;
+  static const double rapidFireMultiplier = 0.55;
+  static const double rapidFireWindow = 2.2;
+  static const double actionMinInterval = 0.14;
+  static const double baseDecayRate = 0.17;
+  static const double greenDecayRate = 0.26;
 
-  // ── Velocity smoothing (rolling average over N frames) ──
-  static const int _velocitySmoothFrames = 4;
-  static const double _velocityFloor = 0.00005;
-  static const double _maxGainPerFrame = 0.04;
-  final Queue<double> _velocityHistory = Queue<double>();
+  // ── Movement signal shaping ──
+  // Ignore near-zero jitter and hard-reject impossible one-frame spikes.
+  static const double _velocityNoiseFloor = 0.00005;
+  static const double _velocityCautionStart = 0.00055;
+  static const double _velocityDangerStart = 0.0018;
+  static const double _velocityGlitchCutoff = 0.035;
+  static const double _velocityEmaFast = 0.35;
+  static const double _velocityEmaSlow = 0.16;
+
+  static const double _movementEvidenceRise = 1.70;
+  static const double _movementEvidenceFall = 1.25;
+  static const double _maxMovementGainPerSecond = 0.30;
+  static const double _maxGainPerFrame = 0.040;
+
+  double _velocityEma = 0.0;
+  double _movementEvidence = 0.0;
 
   // ── Rolling window for action fires ──
   final Queue<double> _actionFireTimes = Queue<double>();
   double _gameTime = 0.0;
+  double _lastActionAt = -999.0;
 
   /// Grace period after reset where no detection accumulates.
   double _graceTimer = 0.0;
@@ -75,29 +88,57 @@ class SurveillanceSystem {
       _actionFireTimes.removeFirst();
     }
 
-    // ── Velocity smoothing: rolling average to filter tracking noise ──
-    _velocityHistory.addLast(wristVelocitySq);
-    while (_velocityHistory.length > _velocitySmoothFrames) {
-      _velocityHistory.removeFirst();
-    }
-    double smoothedVelocity = 0.0;
-    for (final v in _velocityHistory) {
-      smoothedVelocity += v;
-    }
-    smoothedVelocity /= _velocityHistory.length;
+    // ── Movement detection with jitter filtering and evidence accumulation ──
+    if (wristVelocitySq > 0.0) {
+      if (wristVelocitySq < _velocityGlitchCutoff) {
+        final alpha = wristVelocitySq > _velocityEma
+            ? _velocityEmaFast
+            : _velocityEmaSlow;
+        _velocityEma += alpha * (wristVelocitySq - _velocityEma);
+      } else {
+        // Tracking swaps can create impossible jumps; treat those as noise.
+        _velocityEma *= 0.85;
+      }
 
-    // Accumulate detection from smoothed velocity (ignore below floor)
-    if (smoothedVelocity > _velocityFloor) {
+      final normalized =
+          ((_velocityEma - _velocityCautionStart) /
+                  (_velocityDangerStart - _velocityCautionStart))
+              .clamp(0.0, 1.0);
+
+      if (normalized > 0.0) {
+        _movementEvidence +=
+            (0.45 + 0.55 * normalized * normalized) *
+            _movementEvidenceRise *
+            dt;
+      } else {
+        final extra = _velocityEma < _velocityNoiseFloor ? 0.35 : 0.0;
+        _movementEvidence -= (_movementEvidenceFall + extra) * dt;
+      }
+    } else {
+      _movementEvidence -= (_movementEvidenceFall + 0.25) * dt;
+      _velocityEma *= 0.90;
+    }
+
+    _movementEvidence = _movementEvidence.clamp(0.0, 1.0);
+
+    if (_movementEvidence > 0.0) {
       final rawGain =
-          (smoothedVelocity - _velocityFloor) * velocityGain * dt * 60.0;
+          pow(_movementEvidence, 1.35) * _maxMovementGainPerSecond * dt;
       _detectionLevel += rawGain.clamp(0.0, _maxGainPerFrame);
     }
 
-    // Decay — slower so gains actually accumulate
+    // Decay with stronger recovery when the player is calm.
+    final calmBonus = (_movementEvidence < 0.10 && _actionFireTimes.length <= 1)
+        ? 0.06
+        : 0.0;
     final decayRate = _detectionLevel < yellowThreshold
-        ? greenDecayRate
-        : baseDecayRate;
-    _detectionLevel -= decayRate * dt;
+        ? (greenDecayRate + calmBonus)
+        : (baseDecayRate + calmBonus * 0.5);
+    final redRecoveryBoost =
+        (_detectionLevel >= redThreshold && _movementEvidence < 0.08)
+        ? 0.22
+        : 0.0;
+    _detectionLevel -= (decayRate + redRecoveryBoost) * dt;
 
     // Clamp
     _detectionLevel = _detectionLevel.clamp(0.0, 1.0);
@@ -121,6 +162,10 @@ class SurveillanceSystem {
   void onActionFired() {
     if (_graceTimer > 0) return;
 
+    // Coalesce duplicated triggers from the same cast animation.
+    if (_gameTime - _lastActionAt < actionMinInterval) return;
+    _lastActionAt = _gameTime;
+
     _actionFireTimes.addLast(_gameTime);
 
     final fireCount = _actionFireTimes.length;
@@ -143,8 +188,10 @@ class SurveillanceSystem {
     _timeAtRed = 0.0;
     _triggered = false;
     _actionFireTimes.clear();
-    _velocityHistory.clear();
+    _velocityEma = 0.0;
+    _movementEvidence = 0.0;
     _gameTime = 0.0;
+    _lastActionAt = -999.0;
     _graceTimer = 1.5;
     _pushToJs(0.0);
   }

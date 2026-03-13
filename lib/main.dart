@@ -20,6 +20,7 @@ import 'package:fpv_magic/systems/hand_tracking/tracking_factory.dart'
     if (dart.library.js_interop) 'package:fpv_magic/systems/hand_tracking/tracking_factory_web.dart';
 import 'package:fpv_magic/systems/gesture/gesture_type.dart';
 import 'package:fpv_magic/models/player_stats.dart';
+import 'package:fpv_magic/systems/audio_manager.dart';
 import 'package:fpv_magic/systems/save_system.dart';
 
 void main() {
@@ -71,6 +72,25 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   GestureType activeGesture = GestureType.none;
   bool _bigBrotherGameOver = false;
 
+  void _syncUiMusicForState(GameState state) {
+    if (state == GameState.mainMenu || state == GameState.tutorial) {
+      AudioManager.playMenuTutorialMusic(volume: 1.0);
+    } else {
+      AudioManager.stopMenuTutorialMusic();
+    }
+  }
+
+  void _setGameState(GameState state, {bool? bigBrotherGameOver}) {
+    if (!mounted) return;
+    setState(() {
+      gameState = state;
+      if (bigBrotherGameOver != null) {
+        _bigBrotherGameOver = bigBrotherGameOver;
+      }
+    });
+    _syncUiMusicForState(state);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -87,7 +107,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     // Start player stats loading and tracking service in parallel.
     // Don't block on trackingService — it loads the ML model which is slow.
     // The user sees the epilepsy warning + menu while it initializes.
-    await playerStats.load();
+    await Future.wait([playerStats.load(), AudioManager.init()]);
     trackingService.start(); // Fire-and-forget — runs in background
 
     // Start the cursor ticker — drives gesture-cursor on UI screens.
@@ -106,15 +126,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _goToTutorial() {
-    setState(() => gameState = GameState.tutorial);
+    _setGameState(GameState.tutorial);
   }
 
   void _goToStory() {
-    setState(() => gameState = GameState.story);
+    _setGameState(GameState.story);
   }
 
   void _goToMap() {
-    setState(() => gameState = GameState.map);
+    _setGameState(GameState.map);
   }
 
   void _onNodeSelected(MapNode node) {
@@ -125,7 +145,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _initGameInstance();
     game!.startLevel(node.startWave, node.endWave);
 
-    setState(() => gameState = GameState.playing);
+    _setGameState(GameState.playing);
   }
 
   void _initGameInstance() {
@@ -139,27 +159,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       },
       onGameOver: () {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _bigBrotherGameOver = false;
-              gameState = GameState.gameOver;
-            });
-          }
+          _setGameState(GameState.gameOver, bigBrotherGameOver: false);
         });
       },
       onBigBrotherGameOver: () {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _bigBrotherGameOver = true;
-              gameState = GameState.gameOver;
-            });
-          }
+          _setGameState(GameState.gameOver, bigBrotherGameOver: true);
         });
       },
       onVictory: () {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => gameState = GameState.victory);
+          _setGameState(GameState.victory);
         });
       },
       onLevelComplete: (wave) {
@@ -171,7 +181,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               playerStats.completeNode(currentNode.id, currentNode.unlocks);
               // Final node has no unlocks — victory!
               if (currentNode.unlocks.isEmpty) {
-                setState(() => gameState = GameState.victory);
+                _setGameState(GameState.victory);
                 return;
               }
             }
@@ -192,15 +202,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _backToMenu() {
-    setState(() => gameState = GameState.mainMenu);
+    _setGameState(GameState.mainMenu);
   }
 
   void _dismissEpilepsyWarning() {
-    setState(() => gameState = GameState.mainMenu);
+    _setGameState(GameState.mainMenu);
   }
 
   @override
   void dispose() {
+    AudioManager.stopMenuTutorialMusic();
     _cursorTicker?.stop();
     _cursorController.dispose();
     trackingService.dispose();
@@ -277,6 +288,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           onComplete: () {
             _goToMap();
           },
+          onBackToMenu: _backToMenu,
           controller: _cursorController,
         ),
       );
@@ -287,6 +299,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           playerStats: playerStats,
           cursorController: _cursorController,
           onNodeSelected: _onNodeSelected,
+          onBackToMenu: _backToMenu,
         ),
       );
     } else {
