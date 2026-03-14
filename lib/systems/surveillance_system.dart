@@ -159,7 +159,7 @@ class SurveillanceSystem {
 
   /// Called when FpvGame fires an instant action (attack, push, ultimate).
   /// Sustained actions (shield, grab) should NOT call this.
-  void onActionFired() {
+  void onActionFired({bool isUltimate = false}) {
     if (_graceTimer > 0) return;
 
     // Coalesce duplicated triggers from the same cast animation.
@@ -169,7 +169,14 @@ class SurveillanceSystem {
     _actionFireTimes.addLast(_gameTime);
 
     final fireCount = _actionFireTimes.length;
-    final gain = actionFireGain * (1.0 + (fireCount - 1) * rapidFireMultiplier);
+    double gain =
+        actionFireGain * (1.0 + (fireCount - 1) * rapidFireMultiplier);
+
+    // Ultimate ability causes a massive detection spike
+    if (isUltimate) {
+      gain += 0.45;
+    }
+
     _detectionLevel = (_detectionLevel + gain).clamp(0.0, 1.0);
 
     // Also push immediately so the JS overlay responds to spam instantly

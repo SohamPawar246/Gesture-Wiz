@@ -67,30 +67,30 @@ class ActionSystem {
         GameAction(
           name: 'Ward Shield',
           gesture: GestureType.openPalm,
-          manaCost: 3,   // Per-second drain while held
+          manaCost: 3, // Per-second drain while held
           effectColor: Color(0xFF44DDFF),
           type: ActionType.shield,
           damage: 0,
-          cooldown: 0.0,  // No cooldown — sustained
+          cooldown: 0.0, // No cooldown — sustained
         ),
         GameAction(
           name: 'Telekinesis',
           gesture: GestureType.pinch,
-          manaCost: 5,   // Per-second drain while holding
+          manaCost: 5, // Per-second drain while holding
           effectColor: Color(0xFF88FF44),
           type: ActionType.grab,
-          damage: 1.5,   // DoT per second while held
+          damage: 1.5, // DoT per second while held
           cooldown: 0.0,
           radius: 140.0, // Grab range
         ),
         GameAction(
           name: 'Overwatch Pulse',
           gesture: GestureType.vSign,
-          manaCost: 40,
+          manaCost: 70,
           effectColor: Color(0xFFFFFF44),
           type: ActionType.ultimate,
-          damage: 2.0,
-          cooldown: 8.0,
+          damage: 4.0,
+          cooldown: 10.0,
           radius: 999.0,
         ),
       ],
@@ -101,7 +101,11 @@ class ActionSystem {
   /// or null if on cooldown / no matching action.
   ///
   /// For sustained actions (shield), returns the action every frame while held.
-  ActionResult? processGesture(GestureType gesture, Vector2 handPosition, {double confidence = 1.0}) {
+  ActionResult? processGesture(
+    GestureType gesture,
+    Vector2 handPosition, {
+    double confidence = 1.0,
+  }) {
     if (gesture == GestureType.none) {
       _currentHeldGesture = GestureType.none;
       return null;
@@ -114,7 +118,11 @@ class ActionSystem {
 
     // Sustained actions (shield, grab) fire continuously while held
     if (action.type == ActionType.shield || action.type == ActionType.grab) {
-      return ActionResult(action: action, handPosition: handPosition, confidence: confidence);
+      return ActionResult(
+        action: action,
+        handPosition: handPosition,
+        confidence: confidence,
+      );
     }
 
     // Instant actions check cooldown
@@ -123,7 +131,11 @@ class ActionSystem {
 
     // Fire and set cooldown
     _cooldowns[gesture] = action.cooldown;
-    return ActionResult(action: action, handPosition: handPosition, confidence: confidence);
+    return ActionResult(
+      action: action,
+      handPosition: handPosition,
+      confidence: confidence,
+    );
   }
 
   /// Tick cooldowns. Call once per frame.

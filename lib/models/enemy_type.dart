@@ -8,12 +8,12 @@ class EnemyData {
   final EnemyKind kind;
   final String name;
   final double maxHp;
-  final double speed;        // Depth units per second (0→1 range)
-  final double damage;       // Damage dealt to player on reaching them
-  final int points;          // Score rewarded on kill
+  final double speed; // Depth units per second (0→1 range)
+  final double damage; // Damage dealt to player on reaching them
+  final int points; // Score rewarded on kill
   final Color primaryColor;
   final Color outlineColor;
-  final bool fireImmune;     // Immune to fire-type spells?
+  final bool fireImmune; // Immune to fire-type spells?
 
   const EnemyData({
     required this.kind,
@@ -34,7 +34,7 @@ class EnemyData {
       name: 'Skull Spirit',
       maxHp: 1,
       speed: 0.12,
-      damage: 10,
+      damage: 20,
       points: 100,
       primaryColor: Color(0xFFD0D0C0),
     ),
@@ -43,7 +43,7 @@ class EnemyData {
       name: 'Evil Eye',
       maxHp: 1,
       speed: 0.20,
-      damage: 5,
+      damage: 12,
       points: 150,
       primaryColor: Color(0xFFCC3333),
     ),
@@ -52,7 +52,7 @@ class EnemyData {
       name: 'Toxic Slime',
       maxHp: 2,
       speed: 0.08,
-      damage: 15,
+      damage: 30,
       points: 200,
       primaryColor: Color(0xFF44CC44),
     ),
@@ -61,7 +61,7 @@ class EnemyData {
       name: 'Armored Knight',
       maxHp: 3,
       speed: 0.07,
-      damage: 25,
+      damage: 45,
       points: 500,
       primaryColor: Color(0xFF8888AA),
       fireImmune: true,
@@ -71,7 +71,7 @@ class EnemyData {
       name: 'Flame Lord',
       maxHp: 10,
       speed: 0.05,
-      damage: 50,
+      damage: 80,
       points: 2000,
       primaryColor: Color(0xFFDD4400),
       outlineColor: Color(0xFF331100),

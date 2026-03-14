@@ -542,7 +542,9 @@ class FpvGame extends FlameGame
   void _executeAction(GameAction action, Vector2 position, double dt) {
     // Notify surveillance of instant action fires (not sustained shield/grab)
     if (action.type != ActionType.shield && action.type != ActionType.grab) {
-      _surveillance.onActionFired();
+      _surveillance.onActionFired(
+        isUltimate: action.type == ActionType.ultimate,
+      );
     }
 
     switch (action.type) {
@@ -598,29 +600,30 @@ class FpvGame extends FlameGame
 
     AudioManager.playSfx('explode.wav', volume: 0.5);
 
+    // Visual projectile from hand position
     add(Projectile(startPosition: position, action: action));
 
-    // Damage enemies near the fist position
+    // Push ALL enemies that are close enough (depth >= 0.25) back
+    // Force push is a shockwave from the player — affects by depth, not screen distance
     for (final enemy in _enemies) {
-      if (!enemy.isDead) {
-        final dist = (enemy.position - position).length;
-        if (dist < action.radius) {
-          enemy.takeDamage(action.damage);
-          add(
-            FloatingText(
-              position: enemy.position.clone(),
-              text: 'PUSHED',
-              color: action.effectColor,
-              fontSize: 16,
-            ),
-          );
-        }
+      if (!enemy.isDead && enemy.depth >= 0.25) {
+        final pushback = 0.35 * enemy.depth; // Push harder the closer they are
+        enemy.depth = (enemy.depth - pushback).clamp(0.0, 1.0);
+        enemy.takeDamage(action.damage);
+        add(
+          FloatingText(
+            position: enemy.position.clone(),
+            text: 'PUSHED',
+            color: action.effectColor,
+            fontSize: 16,
+          ),
+        );
       }
     }
 
     add(
       SpellEffect(
-        position: position.clone(),
+        position: Vector2(size.x / 2, size.y * 0.6),
         effectColor: action.effectColor,
         spellName: action.name,
       ),
