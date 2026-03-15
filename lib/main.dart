@@ -12,6 +12,7 @@ import 'ui/main_menu_screen.dart';
 import 'ui/story_screen.dart';
 import 'ui/gesture_cursor_overlay.dart';
 import 'ui/map_screen.dart';
+import 'ui/node_briefing_screen.dart';
 import 'ui/settings_panel.dart';
 import 'ui/pixelation_wrapper.dart';
 import 'models/map_node.dart';
@@ -53,6 +54,7 @@ enum GameState {
   tutorial,
   map,
   playing,
+  nodeBriefing,
   gameOver,
   victory,
 }
@@ -78,6 +80,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   GestureType activeGesture = GestureType.none;
   bool _bigBrotherGameOver = false;
   bool _audioUnlockedByUser = false;
+  MapNode? _completedNode;
 
   void _retryWebUiMusicOnUserGesture() {
     if (!kIsWeb || _audioUnlockedByUser) return;
@@ -203,6 +206,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             final currentNode = MapGraph.nodes[playerStats.currentNodeId];
             if (currentNode != null) {
               playerStats.completeNode(currentNode.id, currentNode.unlocks);
+              // Show the node briefing if it has text
+              if (currentNode.briefing.isNotEmpty) {
+                _completedNode = currentNode;
+                _setGameState(GameState.nodeBriefing);
+                return;
+              }
               // Final node has no unlocks — victory!
               if (currentNode.unlocks.isEmpty) {
                 _setGameState(GameState.victory);
@@ -346,6 +355,24 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           cursorController: _cursorController,
           onNodeSelected: _onNodeSelected,
           onBackToMenu: _backToMenu,
+        ),
+      );
+    } else if (gameState == GameState.nodeBriefing) {
+      final node = _completedNode;
+      final isFinal = node != null && node.unlocks.isEmpty;
+      screenContent = GestureCursorLayer(
+        controller: _cursorController,
+        child: NodeBriefingScreen(
+          briefingText: node?.briefing ?? '',
+          isFinalNode: isFinal,
+          controller: _cursorController,
+          onContinue: () {
+            if (isFinal) {
+              _setGameState(GameState.victory);
+            } else {
+              _goToMap();
+            }
+          },
         ),
       );
     } else {
