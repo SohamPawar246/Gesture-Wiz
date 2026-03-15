@@ -10,7 +10,7 @@ Built with Flutter + Flame. All art is procedurally generated — zero sprite as
 
 ## The Story
 
-**Year 2084.** The Ministry of Truth has abolished the written word. Big Brother monitors every screen, every camera, every breath. Books are ashes. Free thought is treason. But a resistance survives — channeling forbidden hand gestures through the Ministry's own surveillance cameras to cast spells that shatter its digital constructs.
+**Year 2084.(Taken from George Orwell 1984)** The Ministry of Truth has abolished the written word. Big Brother monitors every screen, every camera, every breath. Books are ashes. Free thought is treason. But a resistance survives — channeling forbidden hand gestures through the Ministry's own surveillance cameras to cast spells that shatter its digital constructs.
 
 You are one of them. Stay calm, fight smart, and don't let Big Brother notice.
 
