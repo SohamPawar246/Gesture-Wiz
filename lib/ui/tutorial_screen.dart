@@ -51,12 +51,28 @@ class _TutorialScreenState extends State<TutorialScreen>
       color: Color(0xFF9944FF),
     ),
     _TutorialStep(
+      icon: Icons.pinch,
+      title: 'PINCH',
+      subtitle: 'TELEKINESIS',
+      description:
+          'Pinch your fingers to GRAB\nan enemy near your hand.\nDrag them around, then release\nto THROW them into others.',
+      color: Color(0xFF88FF44),
+    ),
+    _TutorialStep(
       icon: Icons.flash_on,
       title: 'V SIGN',
       subtitle: 'OVERWATCH PULSE',
       description:
           'Flash a V sign\nto unleash your ULTIMATE —\neliminate all enemies!',
       color: Color(0xFFFFFF44),
+    ),
+    _TutorialStep(
+      icon: Icons.visibility,
+      title: 'SURVEILLANCE',
+      subtitle: 'BIG BROTHER IS WATCHING',
+      description:
+          'Move too fast or spam attacks\nand Big Brother will notice you.\nStay calm — if the eye stays red\nfor 5 seconds, it\'s GAME OVER.',
+      color: Color(0xFFFF0044),
     ),
   ];
 

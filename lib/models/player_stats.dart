@@ -207,4 +207,17 @@ class PlayerStats extends ChangeNotifier {
     );
     _immediateNotify();
   }
+
+  /// Cheat: unlock every node on the map.
+  void unlockAllNodes() {
+    for (final id in MapGraph.nodes.keys) {
+      if (!_unlockedNodes.contains(id)) _unlockedNodes.add(id);
+    }
+    _saveSystem.saveMapProgress(
+      _unlockedNodes,
+      _completedNodes,
+      _currentNodeId,
+    );
+    _immediateNotify();
+  }
 }

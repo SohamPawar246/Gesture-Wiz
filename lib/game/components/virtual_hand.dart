@@ -19,6 +19,10 @@ class VirtualHand extends PositionComponent {
   final List<Offset> _trailPoints = [];
   final int _maxTrailLen = 14;
 
+  /// Shield state — set by FpvGame each frame.
+  bool shieldActive = false;
+  double shieldRadius = 0.0;
+
   double _flameTime = 0;
 
   // Finger bone chains
@@ -40,12 +44,12 @@ class VirtualHand extends PositionComponent {
   static const List<double> _segmentWidths = [13.0, 11.0, 9.0, 7.0];
 
   // ── Skin tone palette ─────────────────────────────────────────────────
-  static const Color _skinBase  = Color(0xFFD4A574);
+  static const Color _skinBase = Color(0xFFD4A574);
   static const Color _skinLight = Color(0xFFEDD5B0);
   static const Color _skinShadow = Color(0xFF9A6038);
-  static const Color _skinMid   = Color(0xFFC28A58);
+  static const Color _skinMid = Color(0xFFC28A58);
   static const Color _nailColor = Color(0xFFEEDCC8);
-  static const Color _nailLine  = Color(0xFFB89070);
+  static const Color _nailLine = Color(0xFFB89070);
 
   // Ember particles (fire magic floating off palm)
   final List<_EmberParticle> _embers = [];
@@ -170,7 +174,13 @@ class VirtualHand extends PositionComponent {
     // ══════════════════════════════════════════════════════════════
     for (final bridge in _knuckleBridge) {
       _renderSkinSegment(
-          canvas, _pos(bridge[0]), _pos(bridge[1]), 11.0, 11.0, accent);
+        canvas,
+        _pos(bridge[0]),
+        _pos(bridge[1]),
+        11.0,
+        11.0,
+        accent,
+      );
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -227,7 +237,8 @@ class VirtualHand extends PositionComponent {
     // ══════════════════════════════════════════════════════════════
     // LAYER 9: GESTURE CHARGE RING
     // ══════════════════════════════════════════════════════════════
-    if (gestureConfidence > 0.3 && activeGestureType != GestureType.none &&
+    if (gestureConfidence > 0.3 &&
+        activeGestureType != GestureType.none &&
         activeGestureType != GestureType.openPalm) {
       final chargeProgress = ((gestureConfidence - 0.3) / 0.7).clamp(0.0, 1.0);
       final ringRadius = 35.0 + chargeProgress * 15.0;
@@ -265,17 +276,75 @@ class VirtualHand extends PositionComponent {
         );
       }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // LAYER 10: SHIELD WARD RADIUS
+    // ══════════════════════════════════════════════════════════════
+    if (shieldActive && shieldRadius > 0) {
+      final pulse = 0.7 + 0.3 * sin(_flameTime * 4.0);
+      const shieldColor = Color(0xFF44DDFF);
+
+      // Outer ward circle — dashed feel via two counter-rotating arcs
+      canvas.drawArc(
+        Rect.fromCircle(center: palmCenter, radius: shieldRadius),
+        _flameTime * 1.5,
+        pi * 1.4,
+        false,
+        Paint()
+          ..color = shieldColor.withValues(alpha: 0.25 * pulse)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
+      );
+      canvas.drawArc(
+        Rect.fromCircle(center: palmCenter, radius: shieldRadius),
+        _flameTime * -1.5 + pi,
+        pi * 1.4,
+        false,
+        Paint()
+          ..color = shieldColor.withValues(alpha: 0.25 * pulse)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
+      );
+
+      // Soft inner glow fill
+      canvas.drawCircle(
+        palmCenter,
+        shieldRadius,
+        Paint()
+          ..color = shieldColor.withValues(alpha: 0.04 * pulse)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, shieldRadius * 0.3),
+      );
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────
 
   double _jointRadius(int landmark) {
-    if (landmark == 1 || landmark == 5 || landmark == 9 ||
-        landmark == 13 || landmark == 17) { return 5.5; } // MCP knuckles
-    if (landmark == 2 || landmark == 6 || landmark == 10 ||
-        landmark == 14 || landmark == 18) { return 4.2; } // PIP knuckles
-    if (landmark == 3 || landmark == 7 || landmark == 11 ||
-        landmark == 15 || landmark == 19) { return 3.2; } // DIP knuckles
+    if (landmark == 1 ||
+        landmark == 5 ||
+        landmark == 9 ||
+        landmark == 13 ||
+        landmark == 17) {
+      return 5.5;
+    } // MCP knuckles
+    if (landmark == 2 ||
+        landmark == 6 ||
+        landmark == 10 ||
+        landmark == 14 ||
+        landmark == 18) {
+      return 4.2;
+    } // PIP knuckles
+    if (landmark == 3 ||
+        landmark == 7 ||
+        landmark == 11 ||
+        landmark == 15 ||
+        landmark == 19) {
+      return 3.2;
+    } // DIP knuckles
     return 3.0;
   }
 
@@ -289,9 +358,12 @@ class VirtualHand extends PositionComponent {
     path.close();
 
     // Base skin fill
-    canvas.drawPath(path, Paint()
-      ..color = _skinBase
-      ..style = PaintingStyle.fill);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = _skinBase
+        ..style = PaintingStyle.fill,
+    );
 
     // Soft inner highlight (3D palm "mound" illusion)
     final palmCenter = _palmCenterOffset();
@@ -317,8 +389,7 @@ class VirtualHand extends PositionComponent {
     canvas.drawPath(
       path,
       Paint()
-        ..color = accent.withValues(
-            alpha: 0.05 + 0.03 * sin(_flameTime * 3.0))
+        ..color = accent.withValues(alpha: 0.05 + 0.03 * sin(_flameTime * 3.0))
         ..style = PaintingStyle.fill
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10.0),
     );
@@ -349,9 +420,12 @@ class VirtualHand extends PositionComponent {
     path.close();
 
     // Skin fill
-    canvas.drawPath(path, Paint()
-      ..color = _skinBase
-      ..style = PaintingStyle.fill);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = _skinBase
+        ..style = PaintingStyle.fill,
+    );
 
     // Cylindrical center highlight streak
     canvas.drawLine(
@@ -379,7 +453,8 @@ class VirtualHand extends PositionComponent {
       to,
       Paint()
         ..color = accent.withValues(
-            alpha: 0.12 + 0.07 * sin(_flameTime * 5 + from.dx))
+          alpha: 0.12 + 0.07 * sin(_flameTime * 5 + from.dx),
+        )
         ..strokeWidth = 0.8
         ..strokeCap = StrokeCap.round
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
@@ -480,9 +555,10 @@ class VirtualHand extends PositionComponent {
     // Small glint on nail
     canvas.drawOval(
       Rect.fromCenter(
-          center: Offset(-nailW * 0.1, -nailH * 0.2),
-          width: nailW * 0.35,
-          height: nailH * 0.3),
+        center: Offset(-nailW * 0.1, -nailH * 0.2),
+        width: nailW * 0.35,
+        height: nailH * 0.3,
+      ),
       Paint()..color = Colors.white.withValues(alpha: 0.4),
     );
     canvas.restore();
@@ -572,15 +648,15 @@ class _EmberParticle {
   });
 
   factory _EmberParticle.random(Random rng) => _EmberParticle(
-        x: 0,
-        y: 0,
-        vx: (rng.nextDouble() - 0.5) * 30,
-        vy: -(10 + rng.nextDouble() * 40),
-        size: 1.5 + rng.nextDouble() * 2.5,
-        life: 0,
-        maxLife: 0,
-        color: _colors[rng.nextInt(_colors.length)],
-      );
+    x: 0,
+    y: 0,
+    vx: (rng.nextDouble() - 0.5) * 30,
+    vy: -(10 + rng.nextDouble() * 40),
+    size: 1.5 + rng.nextDouble() * 2.5,
+    life: 0,
+    maxLife: 0,
+    color: _colors[rng.nextInt(_colors.length)],
+  );
 
   void respawn(Random rng, Offset center) {
     x = center.dx + (rng.nextDouble() - 0.5) * 40;

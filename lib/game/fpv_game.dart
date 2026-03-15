@@ -442,6 +442,12 @@ class FpvGame extends FlameGame
       _hands[handId]?.gestureConfidence = rawGesture.confidence;
       _hands[handId]?.activeGestureType = rawGesture.type;
 
+      // Shield radius visual — only shown on the hand that's shielding
+      if (handId == 0) {
+        _hands[0]?.shieldActive = _shieldActive;
+        _hands[0]?.shieldRadius = _shieldActive ? size.x * 0.28 : 0.0;
+      }
+
       // Gesture callback (from primary hand only)
       if (handId == 0 && onGestureDetected != null) {
         onGestureDetected!(stableGesture);

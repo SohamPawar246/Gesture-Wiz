@@ -13,6 +13,7 @@ import 'ui/story_screen.dart';
 import 'ui/gesture_cursor_overlay.dart';
 import 'ui/map_screen.dart';
 import 'ui/node_briefing_screen.dart';
+import 'ui/credits_screen.dart';
 import 'ui/settings_panel.dart';
 import 'ui/pixelation_wrapper.dart';
 import 'models/map_node.dart';
@@ -55,6 +56,7 @@ enum GameState {
   map,
   playing,
   nodeBriefing,
+  credits,
   gameOver,
   victory,
 }
@@ -368,10 +370,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           controller: _cursorController,
           onContinue: () {
             if (isFinal) {
-              _setGameState(GameState.victory);
+              _setGameState(GameState.credits);
             } else {
               _goToMap();
             }
+          },
+        ),
+      );
+    } else if (gameState == GameState.credits) {
+      screenContent = GestureCursorLayer(
+        controller: _cursorController,
+        child: CreditsScreen(
+          controller: _cursorController,
+          onContinue: () {
+            _setGameState(GameState.victory);
           },
         ),
       );

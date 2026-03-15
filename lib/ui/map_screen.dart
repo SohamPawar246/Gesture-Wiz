@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 
 import '../models/gesture_cursor_controller.dart';
 import '../models/map_node.dart';
@@ -50,6 +51,19 @@ class _MapScreenState extends State<MapScreen>
   Offset? _dragStartPoint;
   bool _isDragging = false;
 
+  // ── Cheat code ──────────────────────────────────────────────────
+  static const List<String> _cheatSequence = [
+    'g',
+    'o',
+    'd',
+    'm',
+    'o',
+    'd',
+    'e',
+  ];
+  final List<String> _cheatBuffer = [];
+  bool _cheatActivated = false;
+
   // ── VFX state ───────────────────────────────────────────────────
   double _time = 0;
   final Random _rng = Random();
@@ -70,10 +84,48 @@ class _MapScreenState extends State<MapScreen>
     _dataStreams = List.generate(12, (_) => _DataStream.random(_rng));
 
     _ticker = createTicker(_tick)..start();
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
+  }
+
+  bool _onKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      final label = event.logicalKey.keyLabel.toLowerCase();
+      if (label.length == 1) {
+        _cheatBuffer.add(label);
+        if (_cheatBuffer.length > _cheatSequence.length) {
+          _cheatBuffer.removeAt(0);
+        }
+        if (!_cheatActivated &&
+            _cheatBuffer.length == _cheatSequence.length &&
+            _cheatBuffer.join() == _cheatSequence.join()) {
+          _cheatActivated = true;
+          widget.playerStats.unlockAllNodes();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                duration: const Duration(seconds: 3),
+                backgroundColor: Colors.black,
+                shape: Border.all(color: Colors.greenAccent, width: 1),
+                content: const Text(
+                  '[ CHEAT ] ALL NODES UNLOCKED',
+                  style: TextStyle(
+                    color: Colors.greenAccent,
+                    fontFamily: 'monospace',
+                    letterSpacing: 2,
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+      }
+    }
+    return false;
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
     _ticker.dispose();
     super.dispose();
   }
