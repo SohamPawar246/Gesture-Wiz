@@ -29,6 +29,7 @@ import 'components/death_pop.dart';
 import 'components/impact_frame.dart';
 import 'components/texel_splat.dart';
 import '../systems/audio_manager.dart';
+import '../systems/performance_monitor.dart';
 import '../systems/surveillance_system.dart';
 
 class FpvGame extends FlameGame
@@ -103,6 +104,7 @@ class FpvGame extends FlameGame
   // Game state
   bool _gameRunning = false;
   double _gameTime = 0;
+  double _perfSyncTimer = 0;
 
   // Pending level config
   List<int>? _pendingLevelConfig;
@@ -270,6 +272,8 @@ class FpvGame extends FlameGame
     _prevGrabHandPos = Vector2.zero();
     _grabDotTimer = 0;
     _gameTime = 0;
+    _perfSyncTimer = 0;
+    PerformanceMonitor.instance.reset();
 
     // Refill HP and mana for the new level (preserve score/xp/map)
     playerStats.resetForLevel();
@@ -296,6 +300,8 @@ class FpvGame extends FlameGame
     super.update(dt);
     if (size.x <= 0 || size.y <= 0) return;
 
+    PerformanceMonitor.instance.recordFrame(dt);
+
     // --- Deferred level start: process here so game is guaranteed mounted ---
     if (_pendingLevelConfig != null) {
       final config = _pendingLevelConfig!;
@@ -307,6 +313,21 @@ class FpvGame extends FlameGame
     if (!_gameRunning) return;
 
     _gameTime += dt;
+    _perfSyncTimer += dt;
+
+    if (_perfSyncTimer >= 0.2) {
+      _perfSyncTimer = 0;
+      PerformanceMonitor.instance.updateEntityCounts(
+        enemies: _enemies.length,
+        projectiles: children.whereType<Projectile>().length,
+        particles:
+            children.whereType<SpellEffect>().length +
+            children.whereType<FloatingText>().length +
+            children.whereType<ImpactFrame>().length +
+            children.whereType<TexelSplat>().length +
+            children.whereType<DeathPop>().length,
+      );
+    }
 
     // --- Kill streak timer decay ---
     if (_killStreakTimer > 0) {

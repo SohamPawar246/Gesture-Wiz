@@ -15,6 +15,7 @@ import 'ui/map_screen.dart';
 import 'ui/node_briefing_screen.dart';
 import 'ui/credits_screen.dart';
 import 'ui/settings_panel.dart';
+import 'ui/fps_display.dart';
 import 'ui/pixelation_wrapper.dart';
 import 'ui/error_notification_overlay.dart';
 import 'models/map_node.dart';
@@ -433,15 +434,33 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       child: Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: (_) => _retryWebUiMusicOnUserGesture(),
-        child: PixelationWrapper(
-          level: _settings.pixelationLevel,
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 400),
-            transitionBuilder: (child, animation) {
-              return _CyberGlitchTransition(animation: animation, child: child);
-            },
-            child: KeyedSubtree(key: ValueKey(gameState), child: screenContent),
-          ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: PixelationWrapper(
+                level: _settings.pixelationLevel,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 400),
+                  transitionBuilder: (child, animation) {
+                    return _CyberGlitchTransition(
+                      animation: animation,
+                      child: child,
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey(gameState),
+                    child: screenContent,
+                  ),
+                ),
+              ),
+            ),
+            if (_settings.showFps)
+              IgnorePointer(
+                child: _settings.fpsDisplayMode == FpsDisplayMode.compact
+                    ? const CompactFpsDisplay()
+                    : const FpsDisplay(),
+              ),
+          ],
         ),
       ),
     );

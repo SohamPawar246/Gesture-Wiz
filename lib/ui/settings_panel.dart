@@ -25,6 +25,8 @@ class SettingsPanel extends StatefulWidget {
 class _SettingsPanelState extends State<SettingsPanel> {
   static const _green = Color(0xFF44FF44);
   static const _dimGreen = Color(0xFF2F6A45);
+  static const _mint = Color(0xFF7BFFA7);
+  static const _aqua = Color(0xFF48FFD8);
   static const _panelBg = Color(0xF0060C0C);
 
   Widget _gestureWrap({required Widget child, required VoidCallback onTap}) {
@@ -47,186 +49,237 @@ class _SettingsPanelState extends State<SettingsPanel> {
         child: Center(
           child: ListenableBuilder(
             listenable: widget.settings,
-            builder: (context, _) => _buildPanel(),
+            builder: (context, _) => _buildPanel(context),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildPanel() {
+  Widget _buildPanel(BuildContext context) {
     final s = widget.settings;
+    final viewport = MediaQuery.sizeOf(context);
+    final panelWidth = (viewport.width - 24).clamp(300.0, 460.0);
+    final maxPanelHeight = (viewport.height * 0.9).clamp(420.0, 760.0);
 
     return Container(
-      width: 440,
-      constraints: const BoxConstraints(maxHeight: 640), // Limit max height
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      width: panelWidth,
+      constraints: BoxConstraints(maxHeight: maxPanelHeight),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
         color: _panelBg,
-        border: Border.all(color: _green.withValues(alpha: 0.5), width: 1.5),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xCC081414), Color(0xDD040B0B)],
+        ),
+        border: Border.all(color: _green.withValues(alpha: 0.45), width: 1.4),
         boxShadow: [
           BoxShadow(
-            color: _green.withValues(alpha: 0.15),
-            blurRadius: 40,
+            color: _green.withValues(alpha: 0.2),
+            blurRadius: 44,
             spreadRadius: 4,
+          ),
+          BoxShadow(
+            color: _aqua.withValues(alpha: 0.08),
+            blurRadius: 70,
+            spreadRadius: 1,
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
         children: [
-          // Title
-          Text(
-            'SETTINGS',
-            style: TextStyle(
-              color: _green,
-              fontFamily: 'monospace',
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 6,
-              shadows: [
-                Shadow(blurRadius: 16, color: _green.withValues(alpha: 0.7)),
-              ],
+          Positioned(
+            top: -38,
+            right: -28,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _aqua.withValues(alpha: 0.06),
+              ),
             ),
           ),
-          const SizedBox(height: 4),
-          _divider(),
-          const SizedBox(height: 18),
-
-          // Scrollable content
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-
-          // Hand sensitivity
-          _sliderRow(
-            label: 'HAND SENSITIVITY',
-            leftHint: 'SMOOTH',
-            rightHint: 'SNAPPY',
-            steps: 7,
-            value: s.handSensitivity,
-            min: 0.30,
-            max: 0.95,
-            onChanged: s.setHandSensitivity,
-          ),
-          const SizedBox(height: 14),
-
-          // Face sensitivity
-          _sliderRow(
-            label: 'FACE SENSITIVITY',
-            leftHint: 'DEFAULT',
-            rightHint: 'ULTRA MAX',
-            steps: 7,
-            value: s.faceSensitivity,
-            min: 0.0,
-            max: 1.0,
-            onChanged: s.setFaceSensitivity,
-          ),
-          const SizedBox(height: 14),
-
-          // Resolution / Pixelation
-          _sliderRow(
-            label: 'RESOLUTION',
-            leftHint: 'CRISP',
-            rightHint: 'RETRO',
-            steps: 7,
-            value: s.pixelationLevel,
-            min: 1.0,
-            max: 4.0,
-            onChanged: s.setPixelationLevel,
-          ),
-          const SizedBox(height: 18),
-          _divider(),
-          const SizedBox(height: 14),
-
-          // Difficulty selector
-          _difficultyRow(s),
-          const SizedBox(height: 18),
-          _divider(),
-          const SizedBox(height: 14),
-
-          // Audio toggles
-          Row(
-            children: [
-              Expanded(
-                child: _toggleButton(
-                  label: 'MUTE BGM',
-                  icon: s.bgmMuted ? Icons.music_off : Icons.music_note,
-                  isActive: s.bgmMuted,
-                  onTap: () => s.setBgmMuted(!s.bgmMuted),
-                ),
+          Positioned(
+            bottom: -40,
+            left: -30,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _green.withValues(alpha: 0.05),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _toggleButton(
-                  label: 'MUTE ALL',
-                  icon: s.allMuted ? Icons.volume_off : Icons.volume_up,
-                  isActive: s.allMuted,
-                  onTap: () => s.setAllMuted(!s.allMuted),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Mouse mode toggle
-          _toggleButton(
-            label: s.useMouseMode ? 'MOUSE MODE ON' : 'MOUSE MODE OFF',
-            icon: s.useMouseMode ? Icons.mouse : Icons.pan_tool,
-            isActive: s.useMouseMode,
-            onTap: () => s.setUseMouseMode(!s.useMouseMode),
-          ),
-
-          const SizedBox(height: 18),
-          _divider(),
-          const SizedBox(height: 14),
-
-          // Performance settings section
-          const Text(
-            'PERFORMANCE',
-            style: TextStyle(
-              color: _green,
-              fontFamily: 'monospace',
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2,
             ),
           ),
-          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final contentWidth = (constraints.maxWidth - 2).clamp(
+                280.0,
+                430.0,
+              );
+              return Align(
+                alignment: Alignment.topCenter,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topCenter,
+                  child: MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: const TextScaler.linear(1.0)),
+                    child: SizedBox(
+                      width: contentWidth,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'SETTINGS',
+                            style: TextStyle(
+                              color: _mint,
+                              fontFamily: 'monospace',
+                              fontSize: 19,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 5,
+                              shadows: [
+                                Shadow(
+                                  blurRadius: 18,
+                                  color: _green.withValues(alpha: 0.65),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'CALIBRATE THE EYE PROTOCOL',
+                            style: TextStyle(
+                              color: _dimGreen,
+                              fontFamily: 'monospace',
+                              fontSize: 8,
+                              letterSpacing: 1.8,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          _divider(),
+                          const SizedBox(height: 9),
 
-          // Show FPS and Auto Quality toggles
-          Row(
-            children: [
-              Expanded(
-                child: _toggleButton(
-                  label: 'SHOW FPS',
-                  icon: s.showFps ? Icons.speed : Icons.speed_outlined,
-                  isActive: s.showFps,
-                  onTap: () => s.setShowFps(!s.showFps),
+                          _sliderRow(
+                            label: 'HAND SENSITIVITY',
+                            leftHint: 'SMOOTH',
+                            rightHint: 'SNAPPY',
+                            steps: 7,
+                            value: s.handSensitivity,
+                            min: 0.30,
+                            max: 0.95,
+                            onChanged: s.setHandSensitivity,
+                          ),
+                          const SizedBox(height: 6),
+
+                          _sliderRow(
+                            label: 'FACE SENSITIVITY',
+                            leftHint: 'DEFAULT',
+                            rightHint: 'ULTRA MAX',
+                            steps: 7,
+                            value: s.faceSensitivity,
+                            min: 0.0,
+                            max: 1.0,
+                            onChanged: s.setFaceSensitivity,
+                          ),
+                          const SizedBox(height: 6),
+
+                          _sliderRow(
+                            label: 'RESOLUTION',
+                            leftHint: 'CRISP',
+                            rightHint: 'RETRO',
+                            steps: 7,
+                            value: s.pixelationLevel,
+                            min: 1.0,
+                            max: 4.0,
+                            onChanged: s.setPixelationLevel,
+                          ),
+                          const SizedBox(height: 8),
+                          _divider(),
+                          const SizedBox(height: 7),
+
+                          _difficultyRow(s),
+                          const SizedBox(height: 8),
+                          _divider(),
+                          const SizedBox(height: 7),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _toggleButton(
+                                  label: 'MUTE BGM',
+                                  icon: s.bgmMuted
+                                      ? Icons.music_off
+                                      : Icons.music_note,
+                                  isActive: s.bgmMuted,
+                                  onTap: () => s.setBgmMuted(!s.bgmMuted),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _toggleButton(
+                                  label: 'MUTE ALL',
+                                  icon: s.allMuted
+                                      ? Icons.volume_off
+                                      : Icons.volume_up,
+                                  isActive: s.allMuted,
+                                  onTap: () => s.setAllMuted(!s.allMuted),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 7),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _toggleButton(
+                                  label: s.useMouseMode
+                                      ? 'MOUSE MODE ON'
+                                      : 'MOUSE MODE OFF',
+                                  icon: s.useMouseMode
+                                      ? Icons.mouse
+                                      : Icons.pan_tool,
+                                  isActive: s.useMouseMode,
+                                  activeColor: const Color(0xFFFF7E6B),
+                                  onTap: () =>
+                                      s.setUseMouseMode(!s.useMouseMode),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _toggleButton(
+                                  label: 'SHOW FPS',
+                                  icon: s.showFps
+                                      ? Icons.speed
+                                      : Icons.speed_outlined,
+                                  isActive: s.showFps,
+                                  activeColor: _aqua,
+                                  onTap: () => s.setShowFps(!s.showFps),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 10),
+                          _divider(),
+                          const SizedBox(height: 9),
+
+                          _gestureWrap(
+                            onTap: widget.onClose,
+                            child: _CloseButton(onTap: widget.onClose),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _toggleButton(
-                  label: 'AUTO QUALITY',
-                  icon: s.autoQuality ? Icons.auto_awesome : Icons.tune,
-                  isActive: s.autoQuality,
-                  onTap: () => s.setAutoQuality(!s.autoQuality),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 18),
-          _divider(),
-          const SizedBox(height: 14),
-
-          // Close button
-          _gestureWrap(
-            onTap: widget.onClose,
-            child: _CloseButton(onTap: widget.onClose),
+              );
+            },
           ),
         ],
       ),
@@ -240,7 +293,9 @@ class _SettingsPanelState extends State<SettingsPanel> {
         gradient: LinearGradient(
           colors: [
             Colors.transparent,
-            _green.withValues(alpha: 0.5),
+            _aqua.withValues(alpha: 0.3),
+            _green.withValues(alpha: 0.75),
+            _aqua.withValues(alpha: 0.3),
             Colors.transparent,
           ],
         ),
@@ -271,19 +326,23 @@ class _SettingsPanelState extends State<SettingsPanel> {
             letterSpacing: 2,
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 5),
         Row(
           children: [
-            Text(
-              leftHint,
-              style: const TextStyle(
-                color: _dimGreen,
-                fontFamily: 'monospace',
-                fontSize: 8,
-                letterSpacing: 1,
+            SizedBox(
+              width: 44,
+              child: Text(
+                leftHint,
+                textAlign: TextAlign.left,
+                style: const TextStyle(
+                  color: _dimGreen,
+                  fontFamily: 'monospace',
+                  fontSize: 8,
+                  letterSpacing: 1,
+                ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(
               child: _SegmentedBar(
                 steps: steps,
@@ -294,14 +353,18 @@ class _SettingsPanelState extends State<SettingsPanel> {
                 controller: widget.controller,
               ),
             ),
-            const SizedBox(width: 8),
-            Text(
-              rightHint,
-              style: const TextStyle(
-                color: _dimGreen,
-                fontFamily: 'monospace',
-                fontSize: 8,
-                letterSpacing: 1,
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 58,
+              child: Text(
+                rightHint,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: _dimGreen,
+                  fontFamily: 'monospace',
+                  fontSize: 8,
+                  letterSpacing: 1,
+                ),
               ),
             ),
           ],
@@ -315,6 +378,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
     required IconData icon,
     required bool isActive,
     required VoidCallback onTap,
+    Color? activeColor,
   }) {
     return _gestureWrap(
       onTap: onTap,
@@ -323,6 +387,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
         icon: icon,
         isActive: isActive,
         onTap: onTap,
+        activeColor: activeColor,
       ),
     );
   }
@@ -341,13 +406,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
             letterSpacing: 2,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 7),
         Row(
           children: Difficulty.values.map((d) {
             final isSelected = s.difficulty == d;
             return Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 2.5),
                 child: _gestureWrap(
                   onTap: () => s.setDifficulty(d),
                   child: _DifficultyButton(
@@ -360,7 +425,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
             );
           }).toList(),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 5),
         Center(
           child: Text(
             s.difficulty.description,
@@ -377,9 +442,6 @@ class _SettingsPanelState extends State<SettingsPanel> {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// Segmented Bar — each segment is a GestureTapTarget-compatible tap zone.
-// ══════════════════════════════════════════════════════════════════════════
 class _SegmentedBar extends StatelessWidget {
   final int steps;
   final double value;
@@ -410,7 +472,7 @@ class _SegmentedBar extends StatelessWidget {
             onTap: () => onChanged(stepValue),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 120),
-              height: 18,
+              height: 16,
               margin: const EdgeInsets.symmetric(horizontal: 1.5),
               decoration: BoxDecoration(
                 color: isActive
@@ -452,20 +514,19 @@ class _SegmentedBar extends StatelessWidget {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// Toggle Widget
-// ══════════════════════════════════════════════════════════════════════════
 class _ToggleWidget extends StatefulWidget {
   final String label;
   final IconData icon;
   final bool isActive;
   final VoidCallback onTap;
+  final Color? activeColor;
 
   const _ToggleWidget({
     required this.label,
     required this.icon,
     required this.isActive,
     required this.onTap,
+    this.activeColor,
   });
 
   @override
@@ -477,9 +538,9 @@ class _ToggleWidgetState extends State<_ToggleWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.isActive
-        ? const Color(0xFFFF4444)
-        : const Color(0xFF44FF44);
+    final activeColor = widget.activeColor ?? const Color(0xFF7BFFA7);
+    final inactiveColor = const Color(0xFF3D8F56);
+    final color = widget.isActive ? activeColor : inactiveColor;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -489,22 +550,22 @@ class _ToggleWidgetState extends State<_ToggleWidget> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: widget.isActive
-                ? color.withValues(alpha: 0.15)
-                : color.withValues(alpha: _hovered ? 0.1 : 0.04),
+                ? color.withValues(alpha: 0.16)
+                : color.withValues(alpha: _hovered ? 0.12 : 0.05),
             border: Border.all(
               color: color.withValues(
-                alpha: _hovered || widget.isActive ? 0.8 : 0.4,
+                alpha: _hovered || widget.isActive ? 0.85 : 0.45,
               ),
-              width: 1.5,
+              width: 1.3,
             ),
             boxShadow: _hovered || widget.isActive
                 ? [
                     BoxShadow(
                       color: color.withValues(alpha: 0.3),
-                      blurRadius: 16,
+                      blurRadius: 12,
                     ),
                   ]
                 : null,
@@ -513,15 +574,23 @@ class _ToggleWidgetState extends State<_ToggleWidget> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(widget.icon, color: color, size: 16),
-              const SizedBox(width: 8),
-              Text(
-                widget.label,
-                style: TextStyle(
-                  color: color,
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2,
+              const SizedBox(width: 7),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: TextStyle(
+                      color: color,
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.7,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -532,9 +601,6 @@ class _ToggleWidgetState extends State<_ToggleWidget> {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// Close Button
-// ══════════════════════════════════════════════════════════════════════════
 class _CloseButton extends StatefulWidget {
   final VoidCallback onTap;
 
@@ -559,7 +625,7 @@ class _CloseButtonState extends State<_CloseButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 10),
           decoration: BoxDecoration(
             color: _hovered
                 ? color.withValues(alpha: 0.15)
@@ -591,9 +657,9 @@ class _CloseButtonState extends State<_CloseButton> {
                 style: TextStyle(
                   color: _hovered ? Palette.uiWhite : color,
                   fontFamily: 'monospace',
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: 4,
+                  letterSpacing: 3.4,
                   shadows: _hovered
                       ? [
                           Shadow(
@@ -612,9 +678,6 @@ class _CloseButtonState extends State<_CloseButton> {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// Difficulty Button
-// ══════════════════════════════════════════════════════════════════════════
 class _DifficultyButton extends StatefulWidget {
   final Difficulty difficulty;
   final bool isSelected;
@@ -656,7 +719,7 @@ class _DifficultyButtonState extends State<_DifficultyButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
             color: widget.isSelected
                 ? color.withValues(alpha: 0.2)
@@ -684,9 +747,9 @@ class _DifficultyButtonState extends State<_DifficultyButton> {
                     ? color
                     : color.withValues(alpha: 0.7),
                 fontFamily: 'monospace',
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w900,
-                letterSpacing: 2,
+                letterSpacing: 1.8,
               ),
             ),
           ),

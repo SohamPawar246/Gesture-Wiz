@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../systems/performance_monitor.dart';
-import '../ui/palette.dart';
+import '../game/palette.dart';
 
 /// Displays FPS and performance metrics overlay
 class FpsDisplay extends StatelessWidget {
@@ -13,52 +13,62 @@ class FpsDisplay extends StatelessWidget {
       builder: (context, _) {
         final monitor = PerformanceMonitor.instance;
 
-        return Positioned(
-          top: 10,
-          left: 10,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.7),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: _getStatusColor(monitor.status),
-                width: 1,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // FPS line
-                _buildMetricRow(
-                  'FPS',
-                  monitor.currentFps.toStringAsFixed(1),
-                  _getStatusColor(monitor.status),
+        return Align(
+          alignment: Alignment.topRight,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 14, right: 14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xDD070A0C),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: _getStatusColor(monitor.status),
+                  width: 1.2,
                 ),
-
-                // Frame time
-                _buildMetricRow(
-                  'Frame',
-                  '${monitor.avgFrameTime.toStringAsFixed(1)}ms',
-                  Palette.uiWhite.withOpacity(0.7),
-                ),
-
-                // Min-Max FPS
-                _buildMetricRow(
-                  'Range',
-                  '${monitor.minFps.toStringAsFixed(0)}-${monitor.maxFps.toStringAsFixed(0)}',
-                  Palette.uiWhite.withOpacity(0.5),
-                ),
-
-                // Entities
-                if (monitor.totalEntities > 0)
-                  _buildMetricRow(
-                    'Entities',
-                    '${monitor.totalEntities}',
-                    Palette.uiWhite.withOpacity(0.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: _getStatusColor(
+                      monitor.status,
+                    ).withValues(alpha: 0.25),
+                    blurRadius: 10,
                   ),
-              ],
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // FPS line
+                  _buildMetricRow(
+                    'FPS',
+                    monitor.currentFps.toStringAsFixed(1),
+                    _getStatusColor(monitor.status),
+                  ),
+
+                  // Frame time
+                  _buildMetricRow(
+                    'Frame',
+                    '${monitor.avgFrameTime.toStringAsFixed(1)}ms',
+                    Palette.uiWhite.withValues(alpha: 0.7),
+                  ),
+
+                  // Min-Max FPS
+                  _buildMetricRow(
+                    'Range',
+                    '${monitor.minFps.toStringAsFixed(0)}-${monitor.maxFps.toStringAsFixed(0)}',
+                    Palette.uiWhite.withValues(alpha: 0.5),
+                  ),
+
+                  // Entities
+                  if (monitor.totalEntities > 0)
+                    _buildMetricRow(
+                      'Entities',
+                      '${monitor.totalEntities}',
+                      Palette.uiWhite.withValues(alpha: 0.5),
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -74,8 +84,8 @@ class FpsDisplay extends StatelessWidget {
           '$label: ',
           style: TextStyle(
             fontFamily: 'VT323',
-            fontSize: 14,
-            color: Palette.uiWhite.withOpacity(0.6),
+            fontSize: 16,
+            color: Palette.uiWhite.withValues(alpha: 0.78),
             height: 1.2,
           ),
         ),
@@ -83,7 +93,7 @@ class FpsDisplay extends StatelessWidget {
           value,
           style: TextStyle(
             fontFamily: 'VT323',
-            fontSize: 14,
+            fontSize: 16,
             color: color,
             fontWeight: FontWeight.bold,
             height: 1.2,
@@ -96,13 +106,13 @@ class FpsDisplay extends StatelessWidget {
   Color _getStatusColor(PerformanceStatus status) {
     switch (status) {
       case PerformanceStatus.excellent:
-        return Palette.healthGreen;
+        return const Color(0xFF7BFFA7);
       case PerformanceStatus.good:
         return Palette.uiMana;
       case PerformanceStatus.warning:
         return Colors.orange;
       case PerformanceStatus.critical:
-        return Palette.enemyRed;
+        return Palette.impactRed;
     }
   }
 }
@@ -118,22 +128,28 @@ class CompactFpsDisplay extends StatelessWidget {
       builder: (context, _) {
         final monitor = PerformanceMonitor.instance;
 
-        return Positioned(
-          top: 10,
-          left: 10,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Text(
-              '${monitor.currentFps.toStringAsFixed(0)} FPS',
-              style: TextStyle(
-                fontFamily: 'VT323',
-                fontSize: 16,
-                color: _getStatusColor(monitor.status),
-                fontWeight: FontWeight.bold,
+        return Align(
+          alignment: Alignment.topRight,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 14, right: 14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xD9070A0C),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: _getStatusColor(monitor.status).withValues(alpha: 0.7),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                '${monitor.currentFps.toStringAsFixed(0)} FPS',
+                style: TextStyle(
+                  fontFamily: 'VT323',
+                  fontSize: 18,
+                  color: _getStatusColor(monitor.status),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -145,13 +161,13 @@ class CompactFpsDisplay extends StatelessWidget {
   Color _getStatusColor(PerformanceStatus status) {
     switch (status) {
       case PerformanceStatus.excellent:
-        return Palette.healthGreen;
+        return const Color(0xFF7BFFA7);
       case PerformanceStatus.good:
         return Palette.uiMana;
       case PerformanceStatus.warning:
         return Colors.orange;
       case PerformanceStatus.critical:
-        return Palette.enemyRed;
+        return Palette.impactRed;
     }
   }
 }
