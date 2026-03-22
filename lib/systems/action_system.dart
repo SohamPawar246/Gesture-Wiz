@@ -2,6 +2,7 @@ import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
 
 import '../models/spell.dart';
+import '../models/spell_upgrade.dart';
 import 'gesture/gesture_type.dart';
 import '../game/components/enemy.dart';
 
@@ -35,7 +36,10 @@ class ActionSystem {
   /// Track currently held gesture for continuous actions (shield)
   GestureType _currentHeldGesture = GestureType.none;
 
-  ActionSystem({required this.actions}) {
+  /// Optional upgrade state for applying spell upgrades to actions
+  SpellUpgradeState? upgradeState;
+
+  ActionSystem({required this.actions, this.upgradeState}) {
     for (final action in actions) {
       _cooldowns[action.gesture] = 0;
     }
@@ -113,8 +117,9 @@ class ActionSystem {
 
     _currentHeldGesture = gesture;
 
-    final action = _findAction(gesture);
-    if (action == null) return null;
+    final baseAction = _findAction(gesture);
+    if (baseAction == null) return null;
+    final action = _applyUpgrades(baseAction);
 
     // Sustained actions (shield, grab) fire continuously while held
     if (action.type == ActionType.shield || action.type == ActionType.grab) {
@@ -165,5 +170,65 @@ class ActionSystem {
       if (action.gesture == gesture) return action;
     }
     return null;
+  }
+
+  /// Apply spell upgrade modifiers to a base action.
+  GameAction _applyUpgrades(GameAction base) {
+    if (upgradeState == null) return base;
+    final lvl = upgradeState!.getLevel(base.type);
+    if (lvl == 0) return base;
+
+    switch (base.type) {
+      case ActionType.attack:
+        // Lv1: +15% speed (handled by projectile), Lv2: -10% mana, Lv3: piercing (handled in FpvGame)
+        return GameAction(
+          name: base.name,
+          gesture: base.gesture,
+          manaCost: base.manaCost * (lvl >= 2 ? 0.9 : 1.0),
+          effectColor: base.effectColor,
+          type: base.type,
+          damage: base.damage,
+          cooldown: base.cooldown,
+          radius: base.radius,
+        );
+      case ActionType.shield:
+        // Lv1: +0.5s linger (handled in FpvGame), Lv2: -15% mana drain
+        return GameAction(
+          name: base.name,
+          gesture: base.gesture,
+          manaCost: base.manaCost * (lvl >= 2 ? 0.85 : 1.0),
+          effectColor: base.effectColor,
+          type: base.type,
+          damage: base.damage,
+          cooldown: base.cooldown,
+          radius: base.radius,
+        );
+      case ActionType.push:
+        // Push doubles as heal upgrade: Lv1: +10 HP (FpvGame), Lv2: -1.5s cooldown
+        return GameAction(
+          name: base.name,
+          gesture: base.gesture,
+          manaCost: base.manaCost,
+          effectColor: base.effectColor,
+          type: base.type,
+          damage: base.damage,
+          cooldown: base.cooldown * (lvl >= 2 ? 0.7 : 1.0),
+          radius: base.radius,
+        );
+      case ActionType.ultimate:
+        // Lv1: +10% damage, Lv2: -2s cooldown
+        return GameAction(
+          name: base.name,
+          gesture: base.gesture,
+          manaCost: base.manaCost,
+          effectColor: base.effectColor,
+          type: base.type,
+          damage: base.damage * (lvl >= 1 ? 1.1 : 1.0),
+          cooldown: base.cooldown - (lvl >= 2 ? 2.0 : 0.0),
+          radius: base.radius,
+        );
+      case ActionType.grab:
+        return base; // Grab has no upgrades
+    }
   }
 }

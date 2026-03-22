@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fpv_magic/models/difficulty.dart';
 import 'package:fpv_magic/models/player_stats.dart';
 import 'package:fpv_magic/systems/save_system.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -303,6 +304,40 @@ void main() {
       test('setTotalWaves should update total', () {
         playerStats.setTotalWaves(10);
         expect(playerStats.totalWaves, 10);
+      });
+    });
+
+    group('difficulty integration', () {
+      test('easy difficulty increases mana regen rate', () async {
+        await playerStats.load();
+        final normalRegen = playerStats.manaRegenRate;
+
+        playerStats.setDifficulty(Difficulty.easy);
+        expect(playerStats.manaRegenRate, greaterThan(normalRegen));
+      });
+
+      test('hard difficulty decreases mana regen rate', () async {
+        await playerStats.load();
+        final normalRegen = playerStats.manaRegenRate;
+
+        playerStats.setDifficulty(Difficulty.hard);
+        expect(playerStats.manaRegenRate, lessThan(normalRegen));
+      });
+
+      test('easy mana regen multiplier is 1.3x normal', () async {
+        await playerStats.load();
+        final normalRegen = playerStats.manaRegenRate;
+
+        playerStats.setDifficulty(Difficulty.easy);
+        expect(playerStats.manaRegenRate, closeTo(normalRegen * 1.3, 0.01));
+      });
+
+      test('hard mana regen multiplier is 0.8x normal', () async {
+        await playerStats.load();
+        final normalRegen = playerStats.manaRegenRate;
+
+        playerStats.setDifficulty(Difficulty.hard);
+        expect(playerStats.manaRegenRate, closeTo(normalRegen * 0.8, 0.01));
       });
     });
   });

@@ -1,7 +1,9 @@
-import 'dart:async';
+import 'dart:math';
+import 'dart:async' as async;
 
 import 'package:flame/game.dart';
 import 'package:flame/events.dart';
+import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
 
 import '../systems/hand_tracking/coordinate_mapper.dart';
@@ -31,6 +33,11 @@ import 'components/texel_splat.dart';
 import '../systems/audio_manager.dart';
 import '../systems/performance_monitor.dart';
 import '../systems/surveillance_system.dart';
+import '../systems/hazard_controller.dart';
+import '../models/difficulty.dart';
+import '../models/spell_upgrade.dart';
+import 'components/artifact_item.dart';
+import '../systems/achievement_manager.dart';
 
 class FpvGame extends FlameGame
     with MouseMovementDetector, TapCallbacks, SecondaryTapCallbacks {
@@ -42,11 +49,12 @@ class FpvGame extends FlameGame
 
   // Big Brother surveillance system
   final SurveillanceSystem _surveillance = SurveillanceSystem();
+  SurveillanceSystem get surveillance => _surveillance;
   Landmark? _prevWristForSurveillance;
   bool _bbGameOverFired = false;
 
   // Level-complete timer — cancelable to prevent stale callbacks
-  Timer? _levelCompleteTimer;
+  async.Timer? _levelCompleteTimer;
 
   // Active enemies
   final List<Enemy> _enemies = [];
@@ -62,12 +70,16 @@ class FpvGame extends FlameGame
   double _shieldTimer = 0;
   bool _shieldActive = false;
   Vector2 _shieldHandPos = Vector2.zero();
+  bool get isShieldActive => _shieldActive;
 
   // Telekinesis grab-throw state
+  /// Held state for GRAB (Enemy or Artifact)
   Enemy? _grabbedEnemy;
+  ArtifactItem? _grabbedArtifact;
   Vector2 _grabHandPos = Vector2.zero();
   Vector2 _prevGrabHandPos = Vector2.zero();
   double _grabDotTimer = 0;
+  double _artifactPullTimer = 0;
 
   // Gesture Subsystem — per hand
   final RuleBasedRecognizer _gestureRecognizer = RuleBasedRecognizer();
@@ -83,7 +95,7 @@ class FpvGame extends FlameGame
   final void Function(int wave)? onLevelComplete;
 
   // Action System (replaces SpellEngine)
-  final ActionSystem _actionSystem = ActionSystem.theEye();
+  late final ActionSystem _actionSystem;
 
   List<GameAction> get knownActions => _actionSystem.actions;
 
@@ -96,10 +108,24 @@ class FpvGame extends FlameGame
   // Hand Tracking (abstract — UdpService on desktop, WebTrackingService on web)
   final TrackingService? trackingService;
 
-  // Mouse Input
+  // Mouse Input / Cursor
   Vector2 _mouseCursor = Vector2.zero();
   bool _isMousePressed = false;
   bool _isRightMousePressed = false;
+
+  /// Expose the current logical cursor (mouse or tracked hand) for components (like ToxicPuddle)
+  Vector2? get currentCursorPosition {
+    // If we had separate hand tracking cursors mapped to screen space we'd return those,
+    // but for now mouse cursor is the primary interaction point in _mouseCursor.
+    // If VR/hand tracking is active, the trackingService updates _mouseCursor or similar.
+    // For simplicity, returning the primary interaction point.
+    return _mouseCursor;
+  }
+
+  /// Expose screen shake for components
+  void triggerScreenShake(double intensity) {
+    _screenShake.trigger(intensity: intensity);
+  }
 
   // Game state
   bool _gameRunning = false;
@@ -108,6 +134,34 @@ class FpvGame extends FlameGame
 
   // Pending level config
   List<int>? _pendingLevelConfig;
+
+  // Track casting for Surveillance Hazards
+  bool justCastSpellThisFrame = false;
+
+  // Expose Hazard States
+  bool get isEmpActive => children.whereType<HazardController>().firstOrNull?.isEmpActive ?? false;
+  bool get isGlitchActive => children.whereType<HazardController>().firstOrNull?.isGlitchActive ?? false;
+
+  // Difficulty setting
+  Difficulty difficulty;
+
+  /// Expose method for boss and other systems to spawn specific enemies
+  void spawnEnemyByType(EnemyKind kind, {double? startDepth, double? corridorX, double? corridorY}) {
+    final baseData = EnemyData.table[kind]!;
+    final data = baseData.scaled(
+      healthMult: difficulty.enemyHealthMultiplier,
+      damageMult: difficulty.enemyDamageMultiplier,
+      speedMult: difficulty.enemySpeedMultiplier,
+    );
+    final enemy = Enemy(
+      data: data,
+      startDepth: startDepth,
+      corridorX: corridorX,
+      corridorY: corridorY,
+    );
+    _enemies.add(enemy);
+    add(enemy);
+  }
 
   FpvGame({
     this.onGestureDetected,
@@ -118,6 +172,7 @@ class FpvGame extends FlameGame
     this.onLevelComplete,
     required this.playerStats,
     this.trackingService,
+    this.difficulty = Difficulty.normal,
   });
 
   @override
@@ -126,6 +181,10 @@ class FpvGame extends FlameGame
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+
+    // Initialize action system with upgrade state
+    _actionSystem = ActionSystem.theEye()
+      ..upgradeState = playerStats.upgrades;
     _mapper = CoordinateMapper(size);
 
     // Background
@@ -147,14 +206,18 @@ class FpvGame extends FlameGame
     _damageFlash = DamageFlash();
     add(_damageFlash);
 
-    // CRT overlay
-    add(RetroOverlay());
+    // 4. Hazards
+    add(HazardController(playerStats.currentNodeId));
+
+    // 5. Retro Overlay
+    add(RetroOverlay()..priority = 900);
 
     // Audio Init — fire-and-forget to avoid blocking game start
     AudioManager.init();
 
     // Wave manager
     _waveManager = WaveManager(
+      difficulty: difficulty,
       onEnemySpawn: _spawnEnemy,
       onWaveStart: (wave) {
         AudioManager.playSfx('wave.wav', volume: 0.6);
@@ -197,7 +260,7 @@ class FpvGame extends FlameGame
           ),
         );
         _levelCompleteTimer?.cancel();
-        _levelCompleteTimer = Timer(const Duration(seconds: 2), () {
+        _levelCompleteTimer = async.Timer(const Duration(seconds: 2), () {
           if (_gameRunning) {
             _gameRunning = false;
             onLevelComplete?.call(_waveManager.currentWave);
@@ -232,8 +295,10 @@ class FpvGame extends FlameGame
   /// Full game restart — resets everything INCLUDING map progress.
   /// Called from main menu "New Game" or similar.
   void restartGame() {
+    playerStats.setDifficulty(difficulty);
     _prepareForLevel();
     _waveManager.reset();
+    _waveManager.difficulty = difficulty;
     playerStats.resetForNewGame();
     _gameRunning = true;
   }
@@ -268,14 +333,17 @@ class FpvGame extends FlameGame
     _shieldActive = false;
     _shieldHandPos = Vector2.zero();
     _grabbedEnemy = null;
+    _grabbedArtifact = null;
     _grabHandPos = Vector2.zero();
     _prevGrabHandPos = Vector2.zero();
     _grabDotTimer = 0;
+    _artifactPullTimer = 0;
     _gameTime = 0;
     _perfSyncTimer = 0;
     PerformanceMonitor.instance.reset();
 
     // Refill HP and mana for the new level (preserve score/xp/map)
+    playerStats.setDifficulty(difficulty);
     playerStats.resetForLevel();
 
     _gameRunning = true;
@@ -376,7 +444,7 @@ class FpvGame extends FlameGame
         } else if (handId == 0) {
           // Primary hand lost — fall through to hand-not-tracked logic
           _hands[handId]?.updateLandmarks([], _mapper, dt: dt);
-          if (_grabbedEnemy != null) _releaseGrab(_grabHandPos);
+          if (_grabbedEnemy != null || _grabbedArtifact != null) _releaseGrab(_grabHandPos);
           continue;
         } else {
           _hands[handId]?.updateLandmarks([], _mapper, dt: dt);
@@ -442,7 +510,7 @@ class FpvGame extends FlameGame
       // Detect grab release (gesture transitioned away from pinch)
       if (handId == 0 &&
           stableGesture != GestureType.pinch &&
-          _grabbedEnemy != null) {
+         (_grabbedEnemy != null || _grabbedArtifact != null)) {
         _releaseGrab(handPos);
       }
 
@@ -469,7 +537,10 @@ class FpvGame extends FlameGame
         _hands[0]?.shieldRadius = _shieldActive ? size.x * 0.28 : 0.0;
       }
 
-      // Gesture callback (from primary hand only)
+      // Reset tracking flag for hazards
+    justCastSpellThisFrame = false;
+
+    // Gesture callback (from primary hand only)
       if (handId == 0 && onGestureDetected != null) {
         onGestureDetected!(stableGesture);
       }
@@ -508,6 +579,30 @@ class FpvGame extends FlameGame
         if (shieldBlocks) {
           AudioManager.playSfx('shield.wav', volume: 0.5);
           enemy.takeDamage(999);
+
+          // Kinetic Battery: Shield Lv3 restores 10 mana on block
+          if (playerStats.upgrades.hasApex(ActionType.shield)) {
+            playerStats.regenerateMana(0); // Force notify
+            // Direct mana add (bypass regen rate)
+            final manaToAdd = 10.0;
+            final currentMana = playerStats.currentMana;
+            final maxMana = playerStats.maxMana;
+            if (currentMana < maxMana) {
+              final addAmount = (currentMana + manaToAdd > maxMana)
+                  ? maxMana - currentMana
+                  : manaToAdd;
+              playerStats.consumeMana(-addAmount); // Negative consume = add
+            }
+            add(
+              FloatingText(
+                position: enemy.position.clone(),
+                text: '+10 MANA',
+                color: Colors.cyanAccent,
+                fontSize: 14,
+              ),
+            );
+          }
+
           add(
             FloatingText(
               position: enemy.position.clone(),
@@ -596,10 +691,29 @@ class FpvGame extends FlameGame
   void _executeAttack(GameAction action, Vector2 position) {
     if (!playerStats.canCast(action.manaCost)) return;
     playerStats.consumeMana(action.manaCost);
+    playerStats.usedAttackThisNode = true;
+
+    // Fail condition for Blacksite
+    if (playerStats.currentNodeId == 'secret_2') {
+      playerStats.takeDamage(9999); // Instant fail
+      return;
+    }
 
     AudioManager.playSfx('fireball.wav', volume: 0.5);
 
     final target = _findNearestEnemy();
+    if (target == null) {
+      // Phase 5 feedback: no enemies to hit
+      add(
+        FloatingText(
+          position: position,
+          text: 'NO TARGET',
+          color: const Color(0xFF888888),
+          fontSize: 14,
+          duration: 1.0,
+        ),
+      );
+    }
     add(
       Projectile(
         startPosition: position,
@@ -619,6 +733,7 @@ class FpvGame extends FlameGame
 
     _screenShake.trigger(intensity: 6.0);
     playerStats.addXp(5);
+    justCastSpellThisFrame = true;
   }
 
   void _executeForcePush(GameAction action, Vector2 position) {
@@ -648,6 +763,21 @@ class FpvGame extends FlameGame
       }
     }
 
+    // Push upgrade Lv1+: also heals player
+    final pushLevel = playerStats.upgrades.getLevel(ActionType.push);
+    if (pushLevel >= 1) {
+      final healAmount = 10.0;
+      playerStats.heal(healAmount);
+      add(
+        FloatingText(
+          position: position.clone(),
+          text: '+${healAmount.toInt()} HP',
+          color: const Color(0xFF44FF44),
+          fontSize: 16,
+        ),
+      );
+    }
+
     add(
       SpellEffect(
         position: Vector2(size.x / 2, size.y * 0.6),
@@ -658,6 +788,7 @@ class FpvGame extends FlameGame
 
     _screenShake.trigger(intensity: 12.0);
     playerStats.addXp(8);
+    justCastSpellThisFrame = true;
   }
 
   void _executeShield(GameAction action, Vector2 position, double dt) {
@@ -668,7 +799,9 @@ class FpvGame extends FlameGame
 
     _shieldActive = true;
     _shieldHandPos = position.clone();
-    _shieldTimer = 0.3; // Lingers briefly after release
+    // Base linger 0.3s, +0.5s if shield upgrade level >= 1
+    final bonusLinger = playerStats.upgrades.getLevel(ActionType.shield) >= 1 ? 0.5 : 0.0;
+    _shieldTimer = 0.3 + bonusLinger;
   }
 
   void _executeGrab(GameAction action, Vector2 position, double dt) {
@@ -683,8 +816,25 @@ class FpvGame extends FlameGame
     _prevGrabHandPos = _grabHandPos.clone();
     _grabHandPos = position.clone();
 
-    // Try to grab if not already holding
-    if (_grabbedEnemy == null || _grabbedEnemy!.isDead) {
+    // 1. Try to grab Artifacts FIRST (highest priority)
+    if (_grabbedEnemy == null && _grabbedArtifact == null) {
+      final artifacts = children.whereType<ArtifactItem>().where((a) => !a.isCollected);
+      for (final a in artifacts) {
+        if (!a.isTargeted) {
+          final dist = (a.position - position).length;
+          if (dist < action.radius * 1.5) { // Slightly forgiving grab radius
+            a.isTargeted = true;
+            _grabbedArtifact = a;
+            _artifactPullTimer = 0;
+            AudioManager.playSfx('shield.wav', volume: 0.3); // Magnet sound
+            break;
+          }
+        }
+      }
+    }
+
+    // 2. Try to grab Enemy if no artifact grabbed
+    if (_grabbedArtifact == null && (_grabbedEnemy == null || _grabbedEnemy!.isDead)) {
       _grabbedEnemy = null;
       for (final enemy in _enemies) {
         if (!enemy.isDead && !enemy.isGrabbed) {
@@ -705,6 +855,60 @@ class FpvGame extends FlameGame
             break;
           }
         }
+      }
+    }
+
+    // Handle grabbed Artifact
+    if (_grabbedArtifact != null && !_grabbedArtifact!.isCollected) {
+      _grabbedArtifact!.position.lerp(position, (dt * 15.0).clamp(0.0, 1.0));
+      _artifactPullTimer += dt;
+      
+      final distToHand = (_grabbedArtifact!.position - position).length;
+      if (distToHand < 30.0 || _artifactPullTimer > 1.0) {
+        // Collect!
+        _grabbedArtifact!.isCollected = true;
+        _grabbedArtifact!.removeFromParent();
+        
+        AudioManager.playSfx('buff.wav', volume: 0.6);
+        add(
+          FloatingText(
+            position: position.clone(),
+            text: '${_grabbedArtifact!.label} ACQUIRED',
+            color: _grabbedArtifact!.color,
+            fontSize: 22,
+          ),
+        );
+        add(DeathPop(position: position.clone(), primaryColor: _grabbedArtifact!.color));
+        
+        switch (_grabbedArtifact!.type) {
+          case ArtifactType.mana:
+            playerStats.addMana(playerStats.maxMana); // Max restore
+            break;
+          case ArtifactType.jammer:
+            surveillance.isJammed = true;
+            // Unjam after 5s via a timer component or checking elsewhere. 
+            // We'll queue a delayed action on the game
+            add(TimerComponent(period: 5.0, removeOnFinish: true, onTick: () {
+              surveillance.isJammed = false;
+            }));
+            break;
+          case ArtifactType.haste:
+            playerStats.hasteActive = true;
+            add(TimerComponent(period: 5.0, removeOnFinish: true, onTick: () {
+              playerStats.hasteActive = false;
+            }));
+            break;
+          case ArtifactType.vitality:
+            playerStats.takeDamage(-(playerStats.maxHp * 0.25)); // Heal 25% max HP
+            break;
+        }
+        
+        playerStats.artifactsCollectedThisNode++;
+        if (playerStats.artifactsCollectedThisNode >= 5) {
+          AchievementManager.instance.unlock('hoarder');
+        }
+
+        _grabbedArtifact = null;
       }
     }
 
@@ -730,6 +934,11 @@ class FpvGame extends FlameGame
   }
 
   void _releaseGrab(Vector2 releasePosition) {
+    if (_grabbedArtifact != null) {
+      _grabbedArtifact!.isTargeted = false;
+      _grabbedArtifact = null;
+    }
+
     if (_grabbedEnemy == null || _grabbedEnemy!.isDead) {
       if (_grabbedEnemy != null) _grabbedEnemy!.isGrabbed = false;
       _grabbedEnemy = null;
@@ -801,10 +1010,32 @@ class FpvGame extends FlameGame
       ),
     );
 
+    int enemiesKilled = 0;
+
     for (final enemy in List.of(_enemies)) {
       if (!enemy.isDead) {
+        final wasDead = enemy.hp <= 0;
         enemy.takeDamage(action.damage);
+        if (enemy.isDead && !wasDead) {
+          enemiesKilled++;
+        }
       }
+    }
+
+    // Executioner: Ultimate Lv3 triggers free shield if 3+ enemies killed
+    if (playerStats.upgrades.hasApex(ActionType.ultimate) && enemiesKilled >= 3) {
+      _shieldActive = true;
+      _shieldHandPos = position.clone(); // Shield centers on current hand
+      _shieldTimer = 3.0; // Free shield lasts 3 seconds
+      AudioManager.playSfx('shield.wav', volume: 0.5);
+      add(
+        FloatingText(
+          position: Vector2(size.x / 2, size.y * 0.4),
+          text: 'EXECUTIONER SHIELD',
+          color: Colors.cyanAccent,
+          fontSize: 24,
+        ),
+      );
     }
 
     add(
@@ -818,10 +1049,16 @@ class FpvGame extends FlameGame
     add(ImpactFrame()..priority = 100);
     _screenShake.trigger(intensity: 20.0);
     playerStats.addXp(20);
+    justCastSpellThisFrame = true;
   }
 
   void _spawnEnemy(EnemyData data) {
-    final enemy = Enemy(data: data);
+    final scaled = data.scaled(
+      healthMult: difficulty.enemyHealthMultiplier,
+      damageMult: difficulty.enemyDamageMultiplier,
+      speedMult: difficulty.enemySpeedMultiplier,
+    );
+    final enemy = Enemy(data: scaled);
     _enemies.add(enemy);
     add(enemy);
   }
@@ -829,6 +1066,15 @@ class FpvGame extends FlameGame
   void _onEnemyDeath(Enemy enemy) {
     _enemies.remove(enemy);
     enemy.removeFromParent();
+
+    // Roll for artifact drop (10% chance)
+    if (Random().nextDouble() < 0.1) {
+      add(ArtifactItem(
+        depth: enemy.depth,
+        corridorX: enemy.corridorX,
+        corridorY: enemy.corridorY,
+      ));
+    }
 
     AudioManager.playSfx('pop.wav', volume: 0.4);
     add(
@@ -856,7 +1102,18 @@ class FpvGame extends FlameGame
     _lastKillTime = now;
 
     _killStreak++;
+    if (_killStreak > playerStats.maxComboThisNode) {
+      playerStats.maxComboThisNode = _killStreak;
+    }
     _killStreakTimer = 2.0;
+
+    AchievementManager.instance.unlock('first_blood');
+    if (_killStreak >= 15) {
+      AchievementManager.instance.unlock('combo_breaker');
+    }
+    if (enemy.data.kind == EnemyKind.boss) {
+      AchievementManager.instance.unlock('rebel_leader');
+    }
 
     final points = enemy.data.points * _comboMultiplier;
     playerStats.addScore(points);
@@ -935,7 +1192,53 @@ class FpvGame extends FlameGame
   }
 
   void _onProjectileHit(Enemy enemy, GameAction action) {
+    // Knight Phalanx Charge block
+    if (enemy.data.kind == EnemyKind.knight && enemy.isKnightCharging && action.type == ActionType.attack) {
+      AudioManager.playSfx('shield.wav', volume: 0.5);
+      add(
+        FloatingText(
+          position: enemy.position.clone(),
+          text: 'BLOCKED',
+          color: Palette.uiGrey,
+          fontSize: 16,
+        ),
+      );
+      add(ImpactFrame()..priority = 100);
+      return; // No damage taken
+    }
+
     enemy.takeDamage(action.damage);
+
+    // Piercing: Attack Lv3 hits a secondary target behind for 60% damage
+    if (action.type == ActionType.attack &&
+        playerStats.upgrades.hasApex(ActionType.attack)) {
+      Enemy? secondaryTarget;
+      double minDepthDiff = 999;
+      for (final other in _enemies) {
+        if (other == enemy || other.isDead) continue;
+        // Looking for an enemy slightly further away (lower depth)
+        if (other.depth < enemy.depth) {
+          final diff = enemy.depth - other.depth;
+          // Only hit enemies reasonably close roughly behind them
+          if (diff < minDepthDiff && diff < 0.4) {
+            minDepthDiff = diff;
+            secondaryTarget = other;
+          }
+        }
+      }
+
+      if (secondaryTarget != null) {
+        secondaryTarget.takeDamage(action.damage * 0.6);
+        add(
+          FloatingText(
+            position: secondaryTarget.position.clone(),
+            text: 'PIERCED',
+            color: const Color(0xFFFF5555),
+            fontSize: 14,
+          ),
+        );
+      }
+    }
 
     if (action.type == ActionType.attack ||
         action.type == ActionType.ultimate) {

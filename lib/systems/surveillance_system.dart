@@ -25,6 +25,9 @@ class SurveillanceSystem {
   bool _triggered = false;
   bool get triggered => _triggered;
 
+  /// Whether the surveillance meter is frozen by a Jammer artifact.
+  bool isJammed = false;
+
   // ── Thresholds ──
   static const double yellowThreshold = 0.30;
   static const double redThreshold = 0.62;
@@ -72,6 +75,11 @@ class SurveillanceSystem {
   /// Called each frame from FpvGame.update().
   void update(double dt, {double wristVelocitySq = 0.0}) {
     if (_triggered) return;
+
+    if (isJammed) {
+      _pushToJs(0.0); // Make camera outline green/safe during jammer
+      return;
+    }
 
     // Grace period after a reset — no accumulation.
     if (_graceTimer > 0) {
@@ -160,7 +168,7 @@ class SurveillanceSystem {
   /// Called when FpvGame fires an instant action (attack, push, ultimate).
   /// Sustained actions (shield, grab) should NOT call this.
   void onActionFired({bool isUltimate = false}) {
-    if (_graceTimer > 0) return;
+    if (_triggered || isJammed || _graceTimer > 0) return;
 
     // Coalesce duplicated triggers from the same cast animation.
     if (_gameTime - _lastActionAt < actionMinInterval) return;
@@ -183,6 +191,18 @@ class SurveillanceSystem {
     _pushToJs(_detectionLevel);
   }
 
+  void addSurveillanceFrame(double amount) {
+    if (_triggered || isJammed) return;
+    _detectionLevel = (_detectionLevel + amount).clamp(0.0, 1.0);
+    _pushToJs(_detectionLevel);
+  }
+
+  void spikeSurveillance(double amount) {
+    if (_triggered || isJammed) return;
+    _detectionLevel = (_detectionLevel + amount).clamp(0.0, 1.0);
+    _pushToJs(_detectionLevel);
+  }
+
   /// Current surveillance zone for external queries.
   SurveillanceZone get zone {
     if (_detectionLevel >= redThreshold) return SurveillanceZone.red;
@@ -200,6 +220,7 @@ class SurveillanceSystem {
     _gameTime = 0.0;
     _lastActionAt = -999.0;
     _graceTimer = 1.5;
+    isJammed = false;
     _pushToJs(0.0);
   }
 }

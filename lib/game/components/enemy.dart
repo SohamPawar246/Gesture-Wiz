@@ -2,13 +2,19 @@ import 'dart:math';
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
 
+import 'dungeon_background.dart';
+import 'death_pop.dart';
+import 'artifact_item.dart';
+import 'damage_flash.dart';
 import '../../models/enemy_type.dart';
 import '../palette.dart';
+import 'toxic_puddle.dart';
+import '../fpv_game.dart';
 
 /// An enemy that spawns deep in the corridor and drifts toward the player.
 /// Depth ranges from 0.0 (far, vanishing point) to 1.0 (reached the player).
 /// Visual size scales with depth to create the illusion of approach.
-class Enemy extends PositionComponent with HasGameReference {
+class Enemy extends PositionComponent with HasGameReference<FpvGame> {
   final EnemyData data;
   double hp;
   double depth; // 0.0 = far, 1.0 = reached player
@@ -16,6 +22,20 @@ class Enemy extends PositionComponent with HasGameReference {
   bool isDead = false;
   bool isGrabbed = false;
   double _time = 0;
+
+  // Special attack states
+  double _slimePuddleTimer = 0;
+
+  bool isEyeballCharging = false;
+  double _eyeballChargeTimer = 0;
+  bool _eyeballFired = false;
+
+  bool isKnightCharging = false;
+
+  double _bossSummonTimer = 0;
+  double _bossSlimeTimer = 0;
+  bool isBossChargingLaser = false;
+  double _bossLaserChargeTimer = 0;
 
   final double corridorX;
   final double corridorY;
@@ -33,11 +53,16 @@ class Enemy extends PositionComponent with HasGameReference {
   bool get reachedPlayer => depth >= 1.0;
 
   void takeDamage(double amount) {
+    // Knight is immune to projectiles from the front while charging, handled by FpvGame
     hp -= amount;
     _flashTimer = 0.18;
     if (hp <= 0) {
       hp = 0;
       isDead = true;
+      if (data.kind == EnemyKind.slime && Random().nextDouble() < 0.5) {
+        // Slimes have a 50% chance to drop a puddle on death
+        game.add(ToxicPuddle(position: position.clone()));
+      }
     }
   }
 
@@ -48,7 +73,93 @@ class Enemy extends PositionComponent with HasGameReference {
     if (isDead) return;
 
     if (!isGrabbed) {
-      depth += data.speed * dt;
+      // Special Movement & Attack Logic
+      if (data.kind == EnemyKind.eyeball && depth >= 0.6 && !_eyeballFired) {
+        // Eyeball stops and charges
+        isEyeballCharging = true;
+        _eyeballChargeTimer += dt;
+        if (_eyeballChargeTimer >= 1.5) {
+          _eyeballFired = true;
+          isEyeballCharging = false;
+          // Fire hitscan beam if player not shielded
+          if (!game.isShieldActive) {
+            game.playerStats.takeDamage(data.damage * 0.8);
+            game.triggerScreenShake(8.0);
+            game.add(DamageFlash());
+          }
+        }
+      } else if (data.kind == EnemyKind.knight && depth > 0.2 && depth < 0.8) {
+        // Knight charges rapidly
+        isKnightCharging = true;
+        depth += (data.speed * 3.5) * dt; 
+      } else if (data.kind == EnemyKind.boss) {
+        // Boss Multi-Phase Logic
+        final hpPercent = hp / data.maxHp;
+        
+        if (hpPercent > 0.5) {
+          // Phase 1 (100-50% HP): Standard movement, summons Skulls
+          depth += data.speed * dt;
+          _bossSummonTimer += dt;
+          if (_bossSummonTimer >= 5.0) {
+            _bossSummonTimer = 0;
+            // Summon 2 skulls
+            game.spawnEnemyByType(EnemyKind.skull, startDepth: depth - 0.1, corridorX: corridorX - 0.2);
+            game.spawnEnemyByType(EnemyKind.skull, startDepth: depth - 0.1, corridorX: corridorX + 0.2);
+          }
+        } else {
+          // Phase 2 (50-0% HP): Stops moving at depth 0.7. Alternates Laser and Slime puddles.
+          if (depth < 0.7) {
+            depth += data.speed * dt;
+          } else {
+            // Stopped at 0.7.
+            // Laser charge
+            if (!isBossChargingLaser) {
+              // Wait before charging
+              _bossLaserChargeTimer += dt;
+              if (_bossLaserChargeTimer >= 3.0) {
+                isBossChargingLaser = true;
+                _bossLaserChargeTimer = 0;
+              }
+            } else {
+              _bossLaserChargeTimer += dt;
+              if (_bossLaserChargeTimer >= 2.0) { // 2s charge
+                isBossChargingLaser = false;
+                _bossLaserChargeTimer = 0;
+                // Fire Laser
+                if (!game.isShieldActive) {
+                  game.playerStats.takeDamage(data.damage * 1.5); // Very heavy damage
+                  game.triggerScreenShake(15.0);
+                  game.add(DamageFlash());
+                }
+              }
+            }
+            
+            // Spew Slime
+            _bossSlimeTimer += dt;
+            if (_bossSlimeTimer >= 2.5) {
+              _bossSlimeTimer = 0;
+              game.add(ToxicPuddle(position: position.clone()));
+              game.add(ToxicPuddle(position: position.clone() + Vector2(100, 50)));
+              game.add(ToxicPuddle(position: position.clone() + Vector2(-100, 50)));
+            }
+          }
+        }
+      } else {
+        isEyeballCharging = false;
+        isKnightCharging = false;
+        depth += data.speed * dt;
+      }
+
+      // Slime passive puddle dropping
+      if (data.kind == EnemyKind.slime && depth > 0.1) {
+        _slimePuddleTimer += dt;
+        if (_slimePuddleTimer >= 1.5) {
+          _slimePuddleTimer = 0;
+          if (Random().nextDouble() < 0.3) {
+            game.add(ToxicPuddle(position: position.clone()));
+          }
+        }
+      }
     }
     if (_flashTimer > 0) _flashTimer -= dt;
 
@@ -76,6 +187,14 @@ class Enemy extends PositionComponent with HasGameReference {
     final isFlashing = _flashTimer > 0;
     final mainColor = isFlashing ? Colors.white : data.primaryColor;
 
+    if (game.isEmpActive) {
+      // Draw as a shadowy silhouette
+      canvas.saveLayer(
+        Rect.fromCenter(center: Offset.zero, width: scaledSize * 3, height: scaledSize * 3),
+        Paint()..colorFilter = const ColorFilter.mode(Color(0xFF030505), BlendMode.srcATop),
+      );
+    }
+
     switch (data.kind) {
       case EnemyKind.skull:
         _renderWraithSkull(canvas, scaledSize, mainColor, isFlashing);
@@ -94,9 +213,13 @@ class Enemy extends PositionComponent with HasGameReference {
         break;
     }
 
-    final hpFraction = hp / data.maxHp;
-    if (data.kind == EnemyKind.boss || hpFraction < 0.999) {
-      _renderHpBar(canvas, scaledSize, hpFraction);
+    if (game.isEmpActive) {
+      canvas.restore();
+    } else {
+      final hpFraction = hp / data.maxHp;
+      if (data.kind == EnemyKind.boss || hpFraction < 0.999) {
+        _renderHpBar(canvas, scaledSize, hpFraction);
+      }
     }
   }
 

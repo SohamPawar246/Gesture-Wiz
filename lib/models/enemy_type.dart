@@ -27,6 +27,26 @@ class EnemyData {
     this.fireImmune = false,
   });
 
+  /// Return a copy of this data with difficulty multipliers applied.
+  EnemyData scaled({
+    required double healthMult,
+    required double damageMult,
+    required double speedMult,
+  }) {
+    return EnemyData(
+      kind: kind,
+      name: name,
+      maxHp: maxHp * healthMult,
+      speed: speed * speedMult,
+      damage: damage * damageMult,
+      points: points,
+      primaryColor: primaryColor,
+      outlineColor: outlineColor,
+      fireImmune: fireImmune,
+    );
+  }
+
+
   /// Pre-defined enemy data table
   static const Map<EnemyKind, EnemyData> table = {
     EnemyKind.skull: EnemyData(

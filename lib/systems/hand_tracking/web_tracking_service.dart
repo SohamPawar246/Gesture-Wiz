@@ -14,6 +14,9 @@ external JSString? _jsGetFacePosition();
 @JS('isMediaPipeReady')
 external JSBoolean _jsIsMediaPipeReady();
 
+@JS('requestCameraPermission')
+external JSPromise<JSBoolean> _jsRequestCameraPermission();
+
 /// Web implementation of TrackingService.
 /// Reads hand/face data from MediaPipe JS bridge via js_interop.
 ///
@@ -57,6 +60,16 @@ class WebTrackingService implements TrackingService {
   @override
   Future<void> start() async {
     // Nothing to start — JS bridge auto-initializes.
+  }
+
+  @override
+  Future<bool> requestCameraPermission() async {
+    try {
+      final jsResult = await _jsRequestCameraPermission().toDart;
+      return jsResult.toDart;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Call this every frame from the game update loop.

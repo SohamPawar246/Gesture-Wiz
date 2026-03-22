@@ -183,5 +183,33 @@ class MapGraph {
           'The Grid belongs to the people now.\n\n'
           '\u2014 TRANSMISSION ENDS \u2014',
     ),
+    'secret_1': MapNode(
+      id: 'secret_1',
+      label: 'THE ARCHIVE',
+      x: 1700,
+      y: 600,
+      startWave: 90, // Special wave handling
+      endWave: 90,
+      unlocks: [],
+      briefing:
+          'THE ARCHIVE \u2014 SURVIVED.\n\n'
+          'Endless waves of old data ghosts.\n'
+          'You proved your stamina.\n\n'
+          'Skill points acquired.',
+    ),
+    'secret_2': MapNode(
+      id: 'secret_2',
+      label: 'THE BLACKSITE',
+      x: 1800,
+      y: 1350,
+      startWave: 91, // Special wave handling
+      endWave: 91,
+      unlocks: [],
+      briefing:
+          'THE BLACKSITE \u2014 PACIFIED.\n\n'
+          'Violence was not the answer here.\n'
+          'You slipped through the cracks.\n\n'
+          'Skill points acquired.',
+    ),
   };
 }

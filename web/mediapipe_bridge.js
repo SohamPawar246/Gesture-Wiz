@@ -458,4 +458,14 @@ window.isMediaPipeReady = function () {
 };
 
 // --- Auto-init ---
-initMediaPipe().then(() => startWebcam());
+initMediaPipe();
+
+window.requestCameraPermission = async function () {
+  try {
+    await startWebcam();
+    return true;
+  } catch (e) {
+    console.warn("[MediaPipe Bridge] Camera denied:", e);
+    return false;
+  }
+};

@@ -185,6 +185,9 @@ class MouseTrackingService implements TrackingService {
   }
 
   @override
+  Future<bool> requestCameraPermission() async => true;
+
+  @override
   void dispose() {
     _started = false;
   }

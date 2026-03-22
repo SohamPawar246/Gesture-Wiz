@@ -107,6 +107,16 @@ class FallbackTrackingService implements TrackingService {
   }
 
   @override
+  Future<bool> requestCameraPermission() async {
+    final granted = await _primary.requestCameraPermission();
+    if (!granted) {
+      forceMouseMode = true;
+      _useMouseFallback = true;
+    }
+    return granted;
+  }
+
+  @override
   void dispose() {
     _started = false;
     _primary.dispose();

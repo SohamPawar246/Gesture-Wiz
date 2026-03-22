@@ -27,13 +27,13 @@ class AudioManager {
       try {
         FlameAudio.bgm.pause();
       } catch (e) {
-        _handleAudioError('pause BGM', e);
+        _logAudioError('pause BGM', e);
       }
     } else if (_wantsUiMusic) {
       try {
         FlameAudio.bgm.resume();
       } catch (e) {
-        _handleAudioError('resume BGM', e);
+        _logAudioError('resume BGM', e);
       }
     }
   }
@@ -46,13 +46,13 @@ class AudioManager {
       try {
         FlameAudio.bgm.pause();
       } catch (e) {
-        _handleAudioError('pause audio', e);
+        _logAudioError('pause audio', e);
       }
     } else if (!_bgmMuted && _wantsUiMusic) {
       try {
         FlameAudio.bgm.resume();
       } catch (e) {
-        _handleAudioError('resume audio', e);
+        _logAudioError('resume audio', e);
       }
     }
   }
@@ -74,6 +74,9 @@ class AudioManager {
         'heal.wav',
         'explode.wav',
         'wave.wav',
+        'menu_hover.wav',
+        'menu_select.wav',
+        'error.wav',
         'My_Song.wav',
         'New_Project.wav',
       ]);
@@ -116,7 +119,8 @@ class AudioManager {
     try {
       FlameAudio.play(file, volume: volume);
     } catch (e) {
-      _handleAudioError('play sound effect', e);
+      // SFX errors are non-critical — just log, don't disable audio
+      _logAudioError('play SFX "$file"', e);
     }
   }
 
@@ -158,7 +162,18 @@ class AudioManager {
     if (forceRestart || (_isUiMusicPlaying && _currentUiTrack != track)) {
       await _stopUiMusicPlayback();
     } else if (isSameTrackPlaying) {
-      return;
+      // Already playing the right track — just ensure it's not paused
+      try {
+        if (!_bgmMuted && !_allMuted) {
+          FlameAudio.bgm.resume();
+        }
+      } catch (_) {
+        // Underlying player may have been disposed (e.g. after leaving game
+        // level scene). Reset state and fall through to restart the track.
+        _isUiMusicPlaying = false;
+        _currentUiTrack = null;
+      }
+      if (_isUiMusicPlaying) return;
     }
 
     if (_bgmMuted || _allMuted) {
@@ -173,7 +188,9 @@ class AudioManager {
     } catch (e) {
       _isUiMusicPlaying = false;
       _currentUiTrack = null;
-      _handleAudioError('play music', e);
+      _logAudioError('play music "$track"', e);
+      // Music errors are non-critical — leave _audioAvailable as-is so SFX
+      // and future music attempts still work.
     }
   }
 
@@ -184,30 +201,25 @@ class AudioManager {
   }
 
   static Future<void> _stopUiMusicPlayback() async {
-    if (!_isUiMusicPlaying) return;
+    // Always clear our state flags, even if the stop call throws.
+    // This prevents stale "isPlaying" state from blocking the next BGM start.
+    _isUiMusicPlaying = false;
+    _currentUiTrack = null;
 
     try {
       await FlameAudio.bgm.stop();
     } catch (e) {
-      _handleAudioError('stop music', e);
+      // The BGM player may have already been disposed (e.g. when the
+      // GameWidget is removed from the tree). This is expected and safe.
+      _logAudioError('stop music', e);
     }
-    _isUiMusicPlaying = false;
-    _currentUiTrack = null;
   }
 
-  /// Handle audio errors - log and optionally notify user
-  static void _handleAudioError(String operation, Object error) {
+  /// Log an audio error without disabling audio globally.
+  /// Only initialization failures permanently disable audio.
+  static void _logAudioError(String operation, Object error) {
     if (kDebugMode) {
       debugPrint('Audio error during $operation: $error');
-    }
-
-    // Only notify once when audio becomes unavailable
-    if (_audioAvailable) {
-      _audioAvailable = false;
-      ErrorNotificationService.instance.warning(
-        'Audio Issue',
-        'Sound may be unavailable. The game will continue.',
-      );
     }
   }
 }

@@ -12,7 +12,9 @@ import 'ui/main_menu_screen.dart';
 import 'ui/story_screen.dart';
 import 'ui/gesture_cursor_overlay.dart';
 import 'ui/map_screen.dart';
+import 'ui/upgrade_screen.dart';
 import 'ui/node_briefing_screen.dart';
+import 'ui/camera_permission_screen.dart';
 import 'ui/credits_screen.dart';
 import 'ui/settings_panel.dart';
 import 'ui/fps_display.dart';
@@ -30,6 +32,9 @@ import 'package:fpv_magic/models/player_stats.dart';
 import 'package:fpv_magic/systems/audio_manager.dart';
 import 'package:fpv_magic/systems/save_system.dart';
 import 'package:fpv_magic/systems/settings_manager.dart';
+import 'package:fpv_magic/systems/achievement_manager.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +48,7 @@ class FpvMagicApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'THE GRID',
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: Palette.bgDeep),
       home: const Scaffold(body: GameScreen()),
@@ -53,9 +59,11 @@ class FpvMagicApp extends StatelessWidget {
 enum GameState {
   epilepsyWarning,
   mainMenu,
+  cameraPermission,
   story,
   tutorial,
   map,
+  upgrades,
   playing,
   nodeBriefing,
   credits,
@@ -80,7 +88,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   bool statsLoaded = false;
   bool _showSettings = false;
-  GameState gameState = GameState.epilepsyWarning;
+  GameState gameState = GameState.cameraPermission;
   GestureType activeGesture = GestureType.none;
   bool _bigBrotherGameOver = false;
   bool _audioUnlockedByUser = false;
@@ -98,9 +106,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _syncUiMusicForState(GameState state) {
     if (state == GameState.mainMenu || state == GameState.tutorial) {
-      AudioManager.playMenuTutorialMusic(volume: 1.0);
-    } else if (state == GameState.map) {
-      AudioManager.playMapMusic(volume: 1.0);
+      // Force restart so the music reliably starts after returning from a
+      // game level (the FlameAudio.bgm player may have been disposed).
+      AudioManager.playMenuTutorialMusic(volume: 1.0, forceRestart: true);
+    } else if (state == GameState.map || state == GameState.upgrades) {
+      AudioManager.playMapMusic(volume: 1.0, forceRestart: true);
     } else {
       AudioManager.stopUiMusic();
     }
@@ -134,7 +144,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     // Start player stats loading and tracking service in parallel.
     // Don't block on trackingService — it loads the ML model which is slow.
     // The user sees the epilepsy warning + menu while it initializes.
-    await Future.wait([playerStats.load(), AudioManager.init()]);
+    await Future.wait([
+      playerStats.load(), 
+      AudioManager.init(),
+      AchievementManager.instance.init(navigatorKey),
+    ]);
     _settings = SettingsManager();
     await _settings.load();
     _applySettings();
@@ -160,6 +174,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _setGameState(GameState.tutorial);
   }
 
+  void _onPlayPressedFromMenu() {
+    _goToTutorial();
+  }
+
   void _goToStory() {
     _setGameState(GameState.story);
   }
@@ -181,6 +199,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   void _initGameInstance() {
     game = FpvGame(
+      difficulty: _settings.difficulty,
       onGestureDetected: (gesture) {
         if (activeGesture != gesture && mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -206,7 +225,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       onLevelComplete: (wave) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            // Unlocks new nodes based on current node's graph
+            // Check Secret Node Unlocks
+            if (!playerStats.tookDamageThisNode && (playerStats.currentNodeId == '4a' || playerStats.currentNodeId == '4b')) {
+              playerStats.completeNode(playerStats.currentNodeId, ['secret_1']); // Automatically unlocks it via completeNode internals
+            }
+            if (playerStats.maxComboThisNode >= 10 && playerStats.currentNodeId == '2b') {
+              playerStats.completeNode(playerStats.currentNodeId, ['secret_2']);
+            }
+            
+            // End of Level Achievements
+            if (playerStats.currentNodeId == 'secret_1' || playerStats.currentNodeId == 'secret_2') {
+              AchievementManager.instance.unlock('architect');
+            }
+            if (!playerStats.tookDamageThisNode && wave > 1) {
+              AchievementManager.instance.unlock('untouchable');
+            }
+            if (!playerStats.usedAttackThisNode && wave > 1) {
+              AchievementManager.instance.unlock('pacifist');
+            }
+            if (game!.surveillance.detectionLevel <= 0 && wave > 1) {
+              AchievementManager.instance.unlock('ghost_machine');
+            }
+
+            // Unlocks new regular nodes based on current node's graph
             final currentNode = MapGraph.nodes[playerStats.currentNodeId];
             if (currentNode != null) {
               playerStats.completeNode(currentNode.id, currentNode.unlocks);
@@ -318,7 +359,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           children: [
             MainMenuScreen(
               controller: _cursorController,
-              onPlayPressed: _goToTutorial,
+              onPlayPressed: _onPlayPressedFromMenu,
               onHowToPlay: _goToTutorial,
               onStory: _goToStory,
               onSettings: () => setState(() => _showSettings = true),
@@ -340,6 +381,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           onContinue: _backToMenu,
         ),
       );
+    } else if (gameState == GameState.cameraPermission) {
+      screenContent = CameraPermissionScreen(
+        playerStats: playerStats,
+        trackingService: trackingService,
+        cursorController: _cursorController,
+        onPermissionHandled: () {
+          _setGameState(GameState.epilepsyWarning);
+        },
+      );
     } else if (gameState == GameState.tutorial) {
       screenContent = GestureCursorLayer(
         controller: _cursorController,
@@ -359,6 +409,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           cursorController: _cursorController,
           onNodeSelected: _onNodeSelected,
           onBackToMenu: _backToMenu,
+          onOpenUpgrades: () => _setGameState(GameState.upgrades),
+        ),
+      );
+    } else if (gameState == GameState.upgrades) {
+      screenContent = GestureCursorLayer(
+        controller: _cursorController,
+        child: UpgradeScreen(
+          playerStats: playerStats,
+          cursorController: _cursorController,
+          onBack: _goToMap,
         ),
       );
     } else if (gameState == GameState.nodeBriefing) {

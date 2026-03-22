@@ -53,6 +53,7 @@ class PerformanceTuner extends ChangeNotifier {
   }
 
   /// Stop tuning (cleanup)
+  @override
   void dispose() {
     _tuningTimer?.cancel();
     _tuningTimer = null;

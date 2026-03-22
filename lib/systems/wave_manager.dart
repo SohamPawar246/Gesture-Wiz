@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../models/enemy_type.dart';
+import '../models/difficulty.dart';
 
 /// Manages wave progression — spawns enemies in escalating waves.
 /// Supports multi-wave levels: startLevel(startWave, endWave) runs
@@ -34,12 +35,16 @@ class WaveManager {
   final void Function()? onAllWavesClear;
   final void Function()? onBossSpawn;
 
+  /// Current difficulty — affects spawn interval timing.
+  Difficulty difficulty;
+
   WaveManager({
     this.onEnemySpawn,
     this.onWaveStart,
     this.onWaveComplete,
     this.onAllWavesClear,
     this.onBossSpawn,
+    this.difficulty = Difficulty.normal,
   });
 
   bool get isActive => _isActive;
@@ -159,6 +164,7 @@ class WaveManager {
   }
 
   _WaveConfig _getWaveConfig(int wave) {
+    final diffMult = difficulty.spawnIntervalMultiplier;
     switch (wave) {
       // ═══════════════════════════════════════════════════════════════
       // SECTOR ALPHA (waves 1-3): Tutorial warmup — skulls only
@@ -166,19 +172,19 @@ class WaveManager {
       case 1:
         return _WaveConfig(
           enemyCount: 4,
-          spawnInterval: 2.5,
+          spawnInterval: 2.5 * diffMult,
           enemyPool: [EnemyKind.skull],
         );
       case 2:
         return _WaveConfig(
           enemyCount: 5,
-          spawnInterval: 2.2,
+          spawnInterval: 2.2 * diffMult,
           enemyPool: [EnemyKind.skull],
         );
       case 3:
         return _WaveConfig(
           enemyCount: 6,
-          spawnInterval: 2.0,
+          spawnInterval: 2.0 * diffMult,
           enemyPool: [EnemyKind.skull],
         );
 
@@ -188,19 +194,19 @@ class WaveManager {
       case 4:
         return _WaveConfig(
           enemyCount: 6,
-          spawnInterval: 2.0,
+          spawnInterval: 2.0 * diffMult,
           enemyPool: [EnemyKind.skull, EnemyKind.skull, EnemyKind.eyeball],
         );
       case 5:
         return _WaveConfig(
           enemyCount: 8,
-          spawnInterval: 1.8,
+          spawnInterval: 1.8 * diffMult,
           enemyPool: [EnemyKind.skull, EnemyKind.eyeball],
         );
       case 6:
         return _WaveConfig(
           enemyCount: 10,
-          spawnInterval: 1.6,
+          spawnInterval: 1.6 * diffMult,
           enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.eyeball],
         );
 
@@ -210,19 +216,19 @@ class WaveManager {
       case 7:
         return _WaveConfig(
           enemyCount: 7,
-          spawnInterval: 1.8,
+          spawnInterval: 1.8 * diffMult,
           enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime],
         );
       case 8:
         return _WaveConfig(
           enemyCount: 9,
-          spawnInterval: 1.6,
+          spawnInterval: 1.6 * diffMult,
           enemyPool: [EnemyKind.eyeball, EnemyKind.slime],
         );
       case 9:
         return _WaveConfig(
           enemyCount: 11,
-          spawnInterval: 1.4,
+          spawnInterval: 1.4 * diffMult,
           enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime],
         );
 
@@ -232,25 +238,25 @@ class WaveManager {
       case 10:
         return _WaveConfig(
           enemyCount: 10,
-          spawnInterval: 1.5,
+          spawnInterval: 1.5 * diffMult,
           enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime],
         );
       case 11:
         return _WaveConfig(
           enemyCount: 12,
-          spawnInterval: 1.3,
+          spawnInterval: 1.3 * diffMult,
           enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.slime],
         );
       case 12:
         return _WaveConfig(
           enemyCount: 14,
-          spawnInterval: 1.2,
+          spawnInterval: 1.2 * diffMult,
           enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime],
         );
       case 13:
         return _WaveConfig(
           enemyCount: 16,
-          spawnInterval: 1.1,
+          spawnInterval: 1.1 * diffMult,
           enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.slime],
         );
 
@@ -260,13 +266,13 @@ class WaveManager {
       case 14:
         return _WaveConfig(
           enemyCount: 14,
-          spawnInterval: 1.2,
+          spawnInterval: 1.2 * diffMult,
           enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.knight],
         );
       case 15:
         return _WaveConfig(
           enemyCount: 16,
-          spawnInterval: 1.1,
+          spawnInterval: 1.1 * diffMult,
           enemyPool: [
             EnemyKind.skull,
             EnemyKind.eyeball,
@@ -277,13 +283,13 @@ class WaveManager {
       case 16:
         return _WaveConfig(
           enemyCount: 18,
-          spawnInterval: 1.0,
+          spawnInterval: 1.0 * diffMult,
           enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.knight],
         );
       case 17:
         return _WaveConfig(
           enemyCount: 20,
-          spawnInterval: 0.9,
+          spawnInterval: 0.9 * diffMult,
           enemyPool: [
             EnemyKind.skull,
             EnemyKind.eyeball,
@@ -298,13 +304,13 @@ class WaveManager {
       case 18:
         return _WaveConfig(
           enemyCount: 18,
-          spawnInterval: 1.0,
+          spawnInterval: 1.0 * diffMult,
           enemyPool: [EnemyKind.eyeball, EnemyKind.slime, EnemyKind.knight],
         );
       case 19:
         return _WaveConfig(
           enemyCount: 20,
-          spawnInterval: 0.9,
+          spawnInterval: 0.9 * diffMult,
           enemyPool: [
             EnemyKind.skull,
             EnemyKind.eyeball,
@@ -315,7 +321,7 @@ class WaveManager {
       case 20:
         return _WaveConfig(
           enemyCount: 22,
-          spawnInterval: 0.8,
+          spawnInterval: 0.8 * diffMult,
           enemyPool: [
             EnemyKind.eyeball,
             EnemyKind.slime,
@@ -326,7 +332,7 @@ class WaveManager {
       case 21:
         return _WaveConfig(
           enemyCount: 24,
-          spawnInterval: 0.7,
+          spawnInterval: 0.7 * diffMult,
           enemyPool: [
             EnemyKind.skull,
             EnemyKind.eyeball,
@@ -341,13 +347,13 @@ class WaveManager {
       case 22:
         return _WaveConfig(
           enemyCount: 15,
-          spawnInterval: 1.0,
+          spawnInterval: 1.0 * diffMult,
           enemyPool: [EnemyKind.knight, EnemyKind.slime, EnemyKind.eyeball],
         );
       case 23:
         return _WaveConfig(
           enemyCount: 18,
-          spawnInterval: 0.8,
+          spawnInterval: 0.8 * diffMult,
           enemyPool: [
             EnemyKind.skull,
             EnemyKind.eyeball,
@@ -358,14 +364,30 @@ class WaveManager {
       case 24:
         return _WaveConfig(
           enemyCount: 8,
-          spawnInterval: 2.0,
-          enemyPool: [EnemyKind.knight, EnemyKind.knight],
+          spawnInterval: 2.0 * diffMult,
+          enemyPool: [EnemyKind.knight, EnemyKind.knight, EnemyKind.boss],
+        );
+
+      // ═══════════════════════════════════════════════════════════════
+      // BONUS ROOMS / SECRET PATHS
+      // ═══════════════════════════════════════════════════════════════
+      case 90: // The Archive: Pure stamina check
+        return _WaveConfig(
+          enemyCount: 150, 
+          spawnInterval: 0.7 * diffMult,
+          enemyPool: [EnemyKind.skull],
+        );
+      case 91: // The Blacksite: Pacifist run
+        return _WaveConfig(
+          enemyCount: 45,
+          spawnInterval: 1.2 * diffMult,
+          enemyPool: [EnemyKind.skull, EnemyKind.eyeball, EnemyKind.slime, EnemyKind.knight],
         );
 
       default:
         return _WaveConfig(
           enemyCount: 25,
-          spawnInterval: 0.6,
+          spawnInterval: 0.6 * diffMult,
           enemyPool: [
             EnemyKind.skull,
             EnemyKind.eyeball,

@@ -14,6 +14,7 @@ class SaveData {
   final List<String> unlockedNodes;
   final List<String> completedNodes;
   final String currentNode;
+  final bool hasSeenCameraPermission;
   final DateTime? lastSaved;
   final String? checksum;
 
@@ -24,6 +25,7 @@ class SaveData {
     required this.unlockedNodes,
     required this.completedNodes,
     required this.currentNode,
+    required this.hasSeenCameraPermission,
     this.lastSaved,
     this.checksum,
   });
@@ -45,6 +47,7 @@ class SaveData {
               .toList() ??
           [],
       currentNode: json['currentNode'] as String? ?? '1',
+      hasSeenCameraPermission: json['hasSeenCameraPermission'] as bool? ?? false,
       lastSaved: json['lastSaved'] != null
           ? DateTime.tryParse(json['lastSaved'] as String)
           : null,
@@ -61,6 +64,7 @@ class SaveData {
       'unlockedNodes': unlockedNodes,
       'completedNodes': completedNodes,
       'currentNode': currentNode,
+      'hasSeenCameraPermission': hasSeenCameraPermission,
       'lastSaved': DateTime.now().toIso8601String(),
       'checksum': _computeChecksum(),
     };
@@ -70,7 +74,7 @@ class SaveData {
   String _computeChecksum() {
     final data =
         '$version|$level|$xp|${unlockedNodes.join(",")}|'
-        '${completedNodes.join(",")}|$currentNode';
+        '${completedNodes.join(",")}|$currentNode|$hasSeenCameraPermission';
     // Simple hash - not cryptographic, just for corruption detection
     var hash = 0;
     for (var i = 0; i < data.length; i++) {
@@ -93,6 +97,7 @@ class SaveData {
     unlockedNodes: ['1'],
     completedNodes: [],
     currentNode: '1',
+    hasSeenCameraPermission: false,
   );
 }
 
@@ -180,6 +185,7 @@ class SaveSystem {
       unlockedNodes: prefs.getStringList(_unlockedNodesKey) ?? ['1'],
       completedNodes: prefs.getStringList(_completedNodesKey) ?? [],
       currentNode: prefs.getString(_currentNodeKey) ?? '1',
+      hasSeenCameraPermission: prefs.getBool('has_seen_camera_permission') ?? false,
     );
 
     // Save in new format
@@ -209,6 +215,7 @@ class SaveSystem {
       unlockedNodes: save.unlockedNodes,
       completedNodes: save.completedNodes,
       currentNode: save.currentNode,
+      hasSeenCameraPermission: save.hasSeenCameraPermission,
     );
 
     // Save migrated data
@@ -305,6 +312,7 @@ class SaveSystem {
         unlockedNodes: data.unlockedNodes,
         completedNodes: data.completedNodes,
         currentNode: data.currentNode,
+        hasSeenCameraPermission: data.hasSeenCameraPermission,
       ),
     );
   }
@@ -339,6 +347,7 @@ class SaveSystem {
         unlockedNodes: unlockedNodes,
         completedNodes: completedNodes,
         currentNode: currentNode,
+        hasSeenCameraPermission: data.hasSeenCameraPermission,
       ),
     );
   }
@@ -387,12 +396,68 @@ class SaveSystem {
     await prefs.remove(_unlockedNodesKey);
     await prefs.remove(_completedNodesKey);
     await prefs.remove(_currentNodeKey);
+    await prefs.remove('skill_points');
+    await prefs.remove('spell_upgrades');
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Spell Upgrade Persistence
+  // ════════════════════════════════════════════════════════════════════════════
+
+  Future<void> saveUpgrades(int skillPoints, Map<String, int> upgrades) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('skill_points', skillPoints);
+    await prefs.setString('spell_upgrades', jsonEncode(upgrades));
+  }
+
+  Future<int> loadSkillPoints() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('skill_points') ?? 0;
+  }
+
+  Future<Map<String, dynamic>?> loadUpgrades() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('spell_upgrades');
+    if (raw == null) return null;
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Export save data as JSON string (for debugging/backup)
   Future<String?> exportSave() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_saveDataKey);
+  }
+
+  Future<void> saveHasSeenCameraPermission(bool hasSeen) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('has_seen_camera_permission', hasSeen);
+    
+    // Also save in the full saveData format
+    final saveData = await loadAll();
+    final updated = SaveData(
+      version: saveData.version,
+      level: saveData.level,
+      xp: saveData.xp,
+      unlockedNodes: saveData.unlockedNodes,
+      completedNodes: saveData.completedNodes,
+      currentNode: saveData.currentNode,
+      hasSeenCameraPermission: hasSeen,
+    );
+    await saveAll(updated);
+  }
+
+  Future<bool> loadHasSeenCameraPermission() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.containsKey('has_seen_camera_permission')) {
+      return prefs.getBool('has_seen_camera_permission') ?? false;
+    }
+    // Fallback to reading full save data
+    final saveData = await loadAll();
+    return saveData.hasSeenCameraPermission;
   }
 
   /// Import save data from JSON string

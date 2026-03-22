@@ -8,12 +8,14 @@ import '../models/map_node.dart';
 import '../models/player_stats.dart';
 import 'gesture_cursor_overlay.dart';
 import 'glitch_text.dart';
+import '../game/palette.dart';
 
 class MapScreen extends StatefulWidget {
   final PlayerStats playerStats;
   final GestureCursorController cursorController;
   final void Function(MapNode node) onNodeSelected;
   final VoidCallback onBackToMenu;
+  final VoidCallback onOpenUpgrades;
 
   const MapScreen({
     super.key,
@@ -21,6 +23,7 @@ class MapScreen extends StatefulWidget {
     required this.cursorController,
     required this.onNodeSelected,
     required this.onBackToMenu,
+    required this.onOpenUpgrades,
   });
 
   @override
@@ -426,6 +429,47 @@ class _MapScreenState extends State<MapScreen>
                       '← MENU',
                       style: TextStyle(
                         color: Colors.cyanAccent,
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // 4c. Augmentations button (top-right, below menu)
+            Positioned(
+              top: 100,
+              right: 24,
+              child: GestureTapTarget(
+                controller: widget.cursorController,
+                dwellSeconds: 1.2,
+                onTap: widget.onOpenUpgrades,
+                child: GestureDetector(
+                  onTap: widget.onOpenUpgrades,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Palette.fireMid.withValues(alpha: 0.8),
+                      border: Border.all(color: Palette.bgHighlight),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Palette.fireGold.withValues(alpha: 0.5),
+                          blurRadius: 10,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      'AUGMENTATIONS',
+                      style: TextStyle(
+                        color: Palette.fireGold,
                         fontFamily: 'monospace',
                         fontSize: 13,
                         fontWeight: FontWeight.w700,

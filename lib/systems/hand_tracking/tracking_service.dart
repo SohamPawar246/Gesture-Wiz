@@ -9,5 +9,6 @@ abstract class TrackingService {
   int get handCount;
   bool get isConnected;
   Future<void> start();
+  Future<bool> requestCameraPermission();
   void dispose();
 }

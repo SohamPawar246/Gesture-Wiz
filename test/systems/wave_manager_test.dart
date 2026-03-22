@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fpv_magic/models/difficulty.dart';
 import 'package:fpv_magic/systems/wave_manager.dart';
 import 'package:fpv_magic/models/enemy_type.dart';
 
@@ -225,6 +226,55 @@ void main() {
         expect(wave10Count, greaterThan(wave1Count));
       });
     });
+
+    group('difficulty integration', () {
+      test('hard difficulty spawns enemies faster than normal', () {
+        // Normal wave manager - count spawns in 5 seconds
+        waveManager.startWave(1);
+        for (int i = 0; i < 5; i++) {
+          waveManager.update(1.0);
+        }
+        final normalSpawned = spawnedEnemies.length;
+
+        // Hard wave manager - count spawns in 5 seconds
+        spawnedEnemies.clear();
+        final hardWm = WaveManager(
+          onEnemySpawn: (data) => spawnedEnemies.add(data),
+          difficulty: Difficulty.hard,
+        );
+        hardWm.startWave(1);
+        for (int i = 0; i < 5; i++) {
+          hardWm.update(1.0);
+        }
+        final hardSpawned = spawnedEnemies.length;
+
+        expect(hardSpawned, greaterThanOrEqualTo(normalSpawned));
+      });
+
+      test('easy difficulty spawns enemies slower than normal', () {
+        // Normal wave manager
+        waveManager.startWave(1);
+        for (int i = 0; i < 5; i++) {
+          waveManager.update(1.0);
+        }
+        final normalSpawned = spawnedEnemies.length;
+
+        // Easy wave manager
+        spawnedEnemies.clear();
+        final easyWm = WaveManager(
+          onEnemySpawn: (data) => spawnedEnemies.add(data),
+          difficulty: Difficulty.easy,
+        );
+        easyWm.startWave(1);
+        for (int i = 0; i < 5; i++) {
+          easyWm.update(1.0);
+        }
+        final easySpawned = spawnedEnemies.length;
+
+        expect(easySpawned, lessThanOrEqualTo(normalSpawned));
+      });
+    });
+
   });
 }
 

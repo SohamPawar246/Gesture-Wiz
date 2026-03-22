@@ -1,7 +1,10 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 
+import '../models/difficulty.dart';
 import '../models/map_node.dart';
+import '../models/spell.dart';
+import '../models/spell_upgrade.dart';
 import '../systems/save_system.dart';
 
 class PlayerStats extends ChangeNotifier {
@@ -16,10 +19,15 @@ class PlayerStats extends ChangeNotifier {
   int _currentWave = 1;
   int _totalWaves = 1;
 
+  // Skill points & spell upgrades
+  int _skillPoints = 0;
+  final SpellUpgradeState upgrades = SpellUpgradeState();
+
   // --- Map System Progress ---
   List<String> _unlockedNodes = ['1'];
   List<String> _completedNodes = [];
   String _currentNodeId = '1';
+  bool _hasSeenCameraPermission = false;
 
   // Throttle notifications to avoid excessive UI rebuilds
   double _notifyAccumulator = 0;
@@ -31,7 +39,23 @@ class PlayerStats extends ChangeNotifier {
   static const double _baseManaRegen = 5.0;
   static const double _baseMaxHp = 100.0;
 
+  // Difficulty setting (affects mana regen)
+  Difficulty _difficulty = Difficulty.normal;
+
+  // Artifact Buffs
+  bool hasteActive = false;
+
+  // Node-specific stats (for unlocking secrets)
+  bool tookDamageThisNode = false;
+  int maxComboThisNode = 0;
+  bool usedAttackThisNode = false;
+  int artifactsCollectedThisNode = 0;
+
   PlayerStats({required SaveSystem saveSystem}) : _saveSystem = saveSystem;
+
+  void setDifficulty(Difficulty d) {
+    _difficulty = d;
+  }
 
   // Getters
   int get level => _level;
@@ -48,11 +72,14 @@ class PlayerStats extends ChangeNotifier {
   String get currentNodeId => _currentNodeId;
   String get currentNodeLabel =>
       MapGraph.nodes[_currentNodeId]?.label ?? 'UNKNOWN';
+  int get skillPoints => _skillPoints;
+  bool get hasSeenCameraPermission => _hasSeenCameraPermission;
 
   // Scaling stats
   int get maxXp => (_baseXpNeeded * pow(1.5, _level - 1)).toInt();
   double get maxMana => _baseMaxMana + (_level - 1) * 20.0;
-  double get manaRegenRate => _baseManaRegen + (_level - 1) * 1.0;
+  double get manaRegenRate =>
+      (_baseManaRegen + (_level - 1) * 1.0) * _difficulty.manaRegenMultiplier;
   double get maxHp => _baseMaxHp + (_level - 1) * 10.0;
 
   bool get isDead => _currentHp <= 0;
@@ -60,6 +87,8 @@ class PlayerStats extends ChangeNotifier {
   Future<void> load() async {
     _level = await _saveSystem.loadLevel();
     _currentXp = await _saveSystem.loadXp();
+    _skillPoints = await _saveSystem.loadSkillPoints();
+    upgrades.loadFromJson(await _saveSystem.loadUpgrades());
     _currentMana = maxMana;
     _currentHp = maxHp;
     _score = 0;
@@ -68,6 +97,13 @@ class PlayerStats extends ChangeNotifier {
     _unlockedNodes = await _saveSystem.loadUnlockedNodes();
     _completedNodes = await _saveSystem.loadCompletedNodes();
     _currentNodeId = await _saveSystem.loadCurrentNode();
+    _hasSeenCameraPermission = await _saveSystem.loadHasSeenCameraPermission();
+    _immediateNotify();
+  }
+
+  Future<void> setHasSeenCameraPermission(bool seen) async {
+    _hasSeenCameraPermission = seen;
+    await _saveSystem.saveHasSeenCameraPermission(seen);
     _immediateNotify();
   }
 
@@ -77,6 +113,8 @@ class PlayerStats extends ChangeNotifier {
     _score = 0;
     _killCount = 0;
     _currentWave = 1;
+    _skillPoints = 0;
+    upgrades.reset();
     _unlockedNodes = ['1'];
     _completedNodes = [];
     _currentNodeId = '1';
@@ -85,6 +123,7 @@ class PlayerStats extends ChangeNotifier {
       _completedNodes,
       _currentNodeId,
     );
+    _saveSystem.saveUpgrades(_skillPoints, upgrades.toJson());
     _immediateNotify();
   }
 
@@ -104,16 +143,21 @@ class PlayerStats extends ChangeNotifier {
     });
   }
 
-  // --- Mana ---
-  bool canCast(double manaCost) => _currentMana >= manaCost;
+  // Gameplay actions
+  bool canCast(double cost) {
+    if (hasteActive) return true;
+    return _currentMana >= cost;
+  }
 
-  bool consumeMana(double manaCost) {
-    if (_currentMana >= manaCost) {
-      _currentMana -= manaCost;
-      _immediateNotify();
-      return true;
-    }
-    return false;
+  void consumeMana(double cost) {
+    if (hasteActive) return;
+    _currentMana = max(0.0, _currentMana - cost);
+    _immediateNotify();
+  }
+
+  void addMana(double amount) {
+    _currentMana = min(maxMana, _currentMana + amount);
+    _immediateNotify();
   }
 
   /// Regenerate mana — uses throttled notification to avoid per-frame rebuilds
@@ -133,6 +177,7 @@ class PlayerStats extends ChangeNotifier {
 
   // --- HP ---
   void takeDamage(double amount) {
+    if (amount > 0) tookDamageThisNode = true;
     _currentHp -= amount;
     if (_currentHp < 0) _currentHp = 0;
     _immediateNotify(); // Immediate — HP changes are critical
@@ -172,11 +217,30 @@ class PlayerStats extends ChangeNotifier {
     while (_currentXp >= maxXp) {
       _currentXp -= maxXp;
       _level++;
-      _currentMana = maxMana;
-      _currentHp = maxHp;
+      // Leveling up grants 1 skill point (no longer auto-heals)
+      _skillPoints++;
     }
 
     _saveSystem.saveProgress(_level, _currentXp);
+    _saveSystem.saveUpgrades(_skillPoints, upgrades.toJson());
+    _immediateNotify();
+  }
+
+  /// Spend a skill point to upgrade a spell. Returns true if successful.
+  bool spendSkillPoint(ActionType type) {
+    final cost = upgrades.nextUpgradeCost(type);
+    if (cost < 0 || _skillPoints < cost) return false;
+    if (!upgrades.upgrade(type)) return false;
+    _skillPoints -= cost;
+    _saveSystem.saveUpgrades(_skillPoints, upgrades.toJson());
+    _immediateNotify();
+    return true;
+  }
+
+  /// Grant bonus skill points (e.g. from secret room rewards).
+  void addSkillPoints(int amount) {
+    _skillPoints += amount;
+    _saveSystem.saveUpgrades(_skillPoints, upgrades.toJson());
     _immediateNotify();
   }
 
@@ -200,6 +264,10 @@ class PlayerStats extends ChangeNotifier {
 
   void setCurrentNode(String nodeId) {
     _currentNodeId = nodeId;
+    tookDamageThisNode = false;
+    maxComboThisNode = 0;
+    usedAttackThisNode = false;
+    artifactsCollectedThisNode = 0;
     _saveSystem.saveMapProgress(
       _unlockedNodes,
       _completedNodes,
