@@ -16,6 +16,7 @@ import 'ui/node_briefing_screen.dart';
 import 'ui/credits_screen.dart';
 import 'ui/settings_panel.dart';
 import 'ui/pixelation_wrapper.dart';
+import 'ui/error_notification_overlay.dart';
 import 'models/map_node.dart';
 import 'game/fpv_game.dart';
 import 'game/palette.dart';
@@ -428,17 +429,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       );
     }
 
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => _retryWebUiMusicOnUserGesture(),
-      child: PixelationWrapper(
-        level: _settings.pixelationLevel,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 400),
-          transitionBuilder: (child, animation) {
-            return _CyberGlitchTransition(animation: animation, child: child);
-          },
-          child: KeyedSubtree(key: ValueKey(gameState), child: screenContent),
+    return ErrorNotificationOverlay(
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _retryWebUiMusicOnUserGesture(),
+        child: PixelationWrapper(
+          level: _settings.pixelationLevel,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            transitionBuilder: (child, animation) {
+              return _CyberGlitchTransition(animation: animation, child: child);
+            },
+            child: KeyedSubtree(key: ValueKey(gameState), child: screenContent),
+          ),
         ),
       ),
     );

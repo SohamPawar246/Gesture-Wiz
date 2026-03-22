@@ -52,3 +52,6 @@ tracker/.env
 .venv/
 venv/
 *.DS_Store
+
+# Claude context file - excluded for privacy and session clarity
+CLAUDE.md

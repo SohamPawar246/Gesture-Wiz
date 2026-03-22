@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../game/palette.dart';
+import '../models/difficulty.dart';
 import '../models/gesture_cursor_controller.dart';
 import '../systems/settings_manager.dart';
 import 'gesture_cursor_overlay.dart';
@@ -58,6 +59,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
 
     return Container(
       width: 440,
+      constraints: const BoxConstraints(maxHeight: 640), // Limit max height
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
       decoration: BoxDecoration(
         color: _panelBg,
@@ -90,6 +92,13 @@ class _SettingsPanelState extends State<SettingsPanel> {
           const SizedBox(height: 4),
           _divider(),
           const SizedBox(height: 18),
+
+          // Scrollable content
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
 
           // Hand sensitivity
           _sliderRow(
@@ -132,6 +141,12 @@ class _SettingsPanelState extends State<SettingsPanel> {
           _divider(),
           const SizedBox(height: 14),
 
+          // Difficulty selector
+          _difficultyRow(s),
+          const SizedBox(height: 18),
+          _divider(),
+          const SizedBox(height: 14),
+
           // Audio toggles
           Row(
             children: [
@@ -150,6 +165,55 @@ class _SettingsPanelState extends State<SettingsPanel> {
                   icon: s.allMuted ? Icons.volume_off : Icons.volume_up,
                   isActive: s.allMuted,
                   onTap: () => s.setAllMuted(!s.allMuted),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Mouse mode toggle
+          _toggleButton(
+            label: s.useMouseMode ? 'MOUSE MODE ON' : 'MOUSE MODE OFF',
+            icon: s.useMouseMode ? Icons.mouse : Icons.pan_tool,
+            isActive: s.useMouseMode,
+            onTap: () => s.setUseMouseMode(!s.useMouseMode),
+          ),
+
+          const SizedBox(height: 18),
+          _divider(),
+          const SizedBox(height: 14),
+
+          // Performance settings section
+          const Text(
+            'PERFORMANCE',
+            style: TextStyle(
+              color: _green,
+              fontFamily: 'monospace',
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Show FPS and Auto Quality toggles
+          Row(
+            children: [
+              Expanded(
+                child: _toggleButton(
+                  label: 'SHOW FPS',
+                  icon: s.showFps ? Icons.speed : Icons.speed_outlined,
+                  isActive: s.showFps,
+                  onTap: () => s.setShowFps(!s.showFps),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _toggleButton(
+                  label: 'AUTO QUALITY',
+                  icon: s.autoQuality ? Icons.auto_awesome : Icons.tune,
+                  isActive: s.autoQuality,
+                  onTap: () => s.setAutoQuality(!s.autoQuality),
                 ),
               ),
             ],
@@ -260,6 +324,55 @@ class _SettingsPanelState extends State<SettingsPanel> {
         isActive: isActive,
         onTap: onTap,
       ),
+    );
+  }
+
+  Widget _difficultyRow(SettingsManager s) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'DIFFICULTY',
+          style: TextStyle(
+            color: _green,
+            fontFamily: 'monospace',
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: Difficulty.values.map((d) {
+            final isSelected = s.difficulty == d;
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: _gestureWrap(
+                  onTap: () => s.setDifficulty(d),
+                  child: _DifficultyButton(
+                    difficulty: d,
+                    isSelected: isSelected,
+                    onTap: () => s.setDifficulty(d),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 6),
+        Center(
+          child: Text(
+            s.difficulty.description,
+            style: const TextStyle(
+              color: _dimGreen,
+              fontFamily: 'monospace',
+              fontSize: 9,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -492,6 +605,90 @@ class _CloseButtonState extends State<_CloseButton> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Difficulty Button
+// ══════════════════════════════════════════════════════════════════════════
+class _DifficultyButton extends StatefulWidget {
+  final Difficulty difficulty;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _DifficultyButton({
+    required this.difficulty,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  State<_DifficultyButton> createState() => _DifficultyButtonState();
+}
+
+class _DifficultyButtonState extends State<_DifficultyButton> {
+  bool _hovered = false;
+
+  Color get _color {
+    switch (widget.difficulty) {
+      case Difficulty.easy:
+        return const Color(0xFF44CC44);
+      case Difficulty.normal:
+        return const Color(0xFFCCCC44);
+      case Difficulty.hard:
+        return const Color(0xFFCC4444);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _color;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          decoration: BoxDecoration(
+            color: widget.isSelected
+                ? color.withValues(alpha: 0.2)
+                : color.withValues(alpha: _hovered ? 0.1 : 0.03),
+            border: Border.all(
+              color: color.withValues(
+                alpha: widget.isSelected ? 0.9 : (_hovered ? 0.6 : 0.3),
+              ),
+              width: widget.isSelected ? 2 : 1,
+            ),
+            boxShadow: widget.isSelected
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Center(
+            child: Text(
+              widget.difficulty.displayName,
+              style: TextStyle(
+                color: widget.isSelected || _hovered
+                    ? color
+                    : color.withValues(alpha: 0.7),
+                fontFamily: 'monospace',
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2,
+              ),
+            ),
           ),
         ),
       ),

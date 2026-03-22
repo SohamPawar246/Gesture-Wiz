@@ -38,6 +38,12 @@ You stand at the end of a procedurally-drawn dungeon corridor. Enemies spawn at 
 
 **Mouse fallback (desktop, no webcam):** move mouse to aim, left-click = Fist, right-click = Fire Bolt.
 
+## Developer Cheats
+
+- `godmode` (typed on keyboard while on the map screen): instantly unlocks all campaign nodes for testing.
+
+This is intended for local development and playtesting.
+
 ---
 
 ## Big Brother Surveillance
