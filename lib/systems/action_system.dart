@@ -59,14 +59,14 @@ class ActionSystem {
           cooldown: 0.4,
         ),
         GameAction(
-          name: 'Force Push',
+          name: 'Sys Restore',
           gesture: GestureType.fist,
-          manaCost: 15,
-          effectColor: Color(0xFF8844FF),
-          type: ActionType.push,
-          damage: 0.5,
-          cooldown: 0.8,
-          radius: 120.0,
+          manaCost: 20,
+          effectColor: Color(0xFF44FF88),
+          type: ActionType.push, // Handled as heal in FpvGame
+          damage: -20, // Used for base heal amount if needed
+          cooldown: 8.0,
+          radius: 0.0,
         ),
         GameAction(
           name: 'Ward Shield',

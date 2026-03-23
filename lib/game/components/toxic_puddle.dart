@@ -3,7 +3,6 @@ import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
 
 import '../fpv_game.dart';
-import '../palette.dart';
 
 class ToxicPuddle extends PositionComponent with HasGameReference<FpvGame> {
   final double radius;

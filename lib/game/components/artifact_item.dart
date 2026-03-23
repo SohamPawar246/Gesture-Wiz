@@ -3,7 +3,6 @@ import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
 
 import '../fpv_game.dart';
-import '../palette.dart';
 
 enum ArtifactType { mana, jammer, haste, vitality }
 

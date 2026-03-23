@@ -46,9 +46,9 @@ class _TutorialScreenState extends State<TutorialScreen>
     _TutorialStep(
       icon: Icons.sports_mma,
       title: 'FIST',
-      subtitle: 'FORCE PUSH',
-      description: 'Clench your fist\nto release a powerful\nAoE force wave.',
-      color: Color(0xFF9944FF),
+      subtitle: 'SYS RESTORE',
+      description: 'Clench your fist\nto activate a kinetic blast\nand restore your system (Heal).',
+      color: Color(0xFF44FF88),
     ),
     _TutorialStep(
       icon: Icons.pinch,

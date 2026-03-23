@@ -70,6 +70,9 @@ class UdpService implements TrackingService {
       DateTime.now().difference(_lastReceived).inMilliseconds < 500;
 
   @override
+  Future<bool> requestCameraPermission() async => true;
+
+  @override
   Future<void> start() async {
     _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, _port);
     _socket!.listen((RawSocketEvent event) {

@@ -469,6 +469,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               return HUD(
                 activeGesture: activeGesture,
                 playerStats: playerStats,
+                surveillanceLevel: playerStats.surveillanceLevel,
               );
             },
           ),

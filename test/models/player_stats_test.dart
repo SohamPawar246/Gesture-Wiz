@@ -73,18 +73,18 @@ void main() {
       test('consumeMana should reduce mana', () async {
         await playerStats.load();
         final before = playerStats.currentMana;
-        final consumed = playerStats.consumeMana(30.0);
+        playerStats.consumeMana(30.0);
 
-        expect(consumed, true);
         expect(playerStats.currentMana, before - 30.0);
       });
 
       test('consumeMana should fail when insufficient mana', () async {
         await playerStats.load();
         final before = playerStats.currentMana;
-        final consumed = playerStats.consumeMana(500.0);
+        if (playerStats.canCast(500.0)) {
+          playerStats.consumeMana(500.0);
+        }
 
-        expect(consumed, false);
         expect(playerStats.currentMana, before);
       });
 

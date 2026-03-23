@@ -11,6 +11,7 @@ class AudioManager {
   static String? _currentUiTrack;
   static const String _menuTutorialTrack = 'My_Song.wav';
   static const String _mapTrack = 'New_Project.wav';
+  static const String _creditsTrack = 'brunomagic-outro-credits-ending-melody-381836.mp3';
 
   static bool _bgmMuted = false;
   static bool _allMuted = false;
@@ -79,6 +80,7 @@ class AudioManager {
         'error.wav',
         'My_Song.wav',
         'New_Project.wav',
+        'brunomagic-outro-credits-ending-melody-381836.mp3',
       ]);
       await FlameAudio.bgm.initialize();
       _initialized = true;
@@ -140,6 +142,13 @@ class AudioManager {
     bool forceRestart = false,
   }) {
     return _playUiMusic(_mapTrack, volume: volume, forceRestart: forceRestart);
+  }
+
+  static Future<void> playCreditsMusic({
+    double volume = 1.0,
+    bool forceRestart = false,
+  }) {
+    return _playUiMusic(_creditsTrack, volume: volume, forceRestart: forceRestart);
   }
 
   static Future<void> _playUiMusic(

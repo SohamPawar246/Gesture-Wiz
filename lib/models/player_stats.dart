@@ -42,8 +42,15 @@ class PlayerStats extends ChangeNotifier {
   // Difficulty setting (affects mana regen)
   Difficulty _difficulty = Difficulty.normal;
 
+  // Surveillance level (0.0–1.0) — updated by FpvGame each frame
+  double surveillanceLevel = 0.0;
+
   // Artifact Buffs
   bool hasteActive = false;
+
+  // Overshield (Heal Lv3 Apex)
+  bool hasOvershield = false;
+  double _overshieldTimer = 0;
 
   // Node-specific stats (for unlocking secrets)
   bool tookDamageThisNode = false;
@@ -173,19 +180,43 @@ class PlayerStats extends ChangeNotifier {
         _immediateNotify();
       }
     }
+
+    // Tick overshield decay
+    if (hasOvershield) {
+      _overshieldTimer -= dt;
+      if (_overshieldTimer <= 0) {
+        hasOvershield = false;
+        _immediateNotify();
+      }
+    }
   }
 
   // --- HP ---
   void takeDamage(double amount) {
-    if (amount > 0) tookDamageThisNode = true;
+    if (amount > 0) {
+      tookDamageThisNode = true;
+      // Overshield absorbs exactly 1 hit of any amount
+      if (hasOvershield) {
+        hasOvershield = false;
+        _overshieldTimer = 0;
+        _immediateNotify();
+        return; // Hit fully absorbed
+      }
+    }
     _currentHp -= amount;
     if (_currentHp < 0) _currentHp = 0;
     _immediateNotify(); // Immediate — HP changes are critical
   }
 
   void heal(double amount) {
+    final excess = (_currentHp + amount) - maxHp;
     _currentHp += amount;
     if (_currentHp > maxHp) _currentHp = maxHp;
+    // Overheal apex: excess healing becomes a 1-hit overshield for 3s
+    if (excess > 0 && upgrades.hasApex(ActionType.push) && !hasOvershield) {
+      hasOvershield = true;
+      _overshieldTimer = 3.0;
+    }
     _immediateNotify();
   }
 

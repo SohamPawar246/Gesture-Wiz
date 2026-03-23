@@ -1,4 +1,3 @@
-import '../systems/gesture/gesture_type.dart';
 import 'spell.dart';
 
 /// Defines the upgrade tree for each spell type.

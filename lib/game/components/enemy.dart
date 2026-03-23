@@ -2,9 +2,6 @@ import 'dart:math';
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
 
-import 'dungeon_background.dart';
-import 'death_pop.dart';
-import 'artifact_item.dart';
 import 'damage_flash.dart';
 import '../../models/enemy_type.dart';
 import '../palette.dart';
@@ -91,11 +88,11 @@ class Enemy extends PositionComponent with HasGameReference<FpvGame> {
       } else if (data.kind == EnemyKind.knight && depth > 0.2 && depth < 0.8) {
         // Knight charges rapidly
         isKnightCharging = true;
-        depth += (data.speed * 3.5) * dt; 
+        depth += (data.speed * 3.5) * dt;
       } else if (data.kind == EnemyKind.boss) {
         // Boss Multi-Phase Logic
         final hpPercent = hp / data.maxHp;
-        
+
         if (hpPercent > 0.5) {
           // Phase 1 (100-50% HP): Standard movement, summons Skulls
           depth += data.speed * dt;
@@ -103,8 +100,16 @@ class Enemy extends PositionComponent with HasGameReference<FpvGame> {
           if (_bossSummonTimer >= 5.0) {
             _bossSummonTimer = 0;
             // Summon 2 skulls
-            game.spawnEnemyByType(EnemyKind.skull, startDepth: depth - 0.1, corridorX: corridorX - 0.2);
-            game.spawnEnemyByType(EnemyKind.skull, startDepth: depth - 0.1, corridorX: corridorX + 0.2);
+            game.spawnEnemyByType(
+              EnemyKind.skull,
+              startDepth: depth - 0.1,
+              corridorX: corridorX - 0.2,
+            );
+            game.spawnEnemyByType(
+              EnemyKind.skull,
+              startDepth: depth - 0.1,
+              corridorX: corridorX + 0.2,
+            );
           }
         } else {
           // Phase 2 (50-0% HP): Stops moving at depth 0.7. Alternates Laser and Slime puddles.
@@ -122,25 +127,32 @@ class Enemy extends PositionComponent with HasGameReference<FpvGame> {
               }
             } else {
               _bossLaserChargeTimer += dt;
-              if (_bossLaserChargeTimer >= 2.0) { // 2s charge
+              if (_bossLaserChargeTimer >= 2.0) {
+                // 2s charge
                 isBossChargingLaser = false;
                 _bossLaserChargeTimer = 0;
                 // Fire Laser
                 if (!game.isShieldActive) {
-                  game.playerStats.takeDamage(data.damage * 1.5); // Very heavy damage
+                  game.playerStats.takeDamage(
+                    data.damage * 1.5,
+                  ); // Very heavy damage
                   game.triggerScreenShake(15.0);
                   game.add(DamageFlash());
                 }
               }
             }
-            
+
             // Spew Slime
             _bossSlimeTimer += dt;
             if (_bossSlimeTimer >= 2.5) {
               _bossSlimeTimer = 0;
               game.add(ToxicPuddle(position: position.clone()));
-              game.add(ToxicPuddle(position: position.clone() + Vector2(100, 50)));
-              game.add(ToxicPuddle(position: position.clone() + Vector2(-100, 50)));
+              game.add(
+                ToxicPuddle(position: position.clone() + Vector2(100, 50)),
+              );
+              game.add(
+                ToxicPuddle(position: position.clone() + Vector2(-100, 50)),
+              );
             }
           }
         }
@@ -190,8 +202,16 @@ class Enemy extends PositionComponent with HasGameReference<FpvGame> {
     if (game.isEmpActive) {
       // Draw as a shadowy silhouette
       canvas.saveLayer(
-        Rect.fromCenter(center: Offset.zero, width: scaledSize * 3, height: scaledSize * 3),
-        Paint()..colorFilter = const ColorFilter.mode(Color(0xFF030505), BlendMode.srcATop),
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: scaledSize * 3,
+          height: scaledSize * 3,
+        ),
+        Paint()
+          ..colorFilter = const ColorFilter.mode(
+            Color(0xFF030505),
+            BlendMode.srcATop,
+          ),
       );
     }
 
@@ -224,1557 +244,1120 @@ class Enemy extends PositionComponent with HasGameReference<FpvGame> {
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // WRAITH SKULL — spectral floating undead skull with erupting eye flames
+  // DRONE — Surveillance drone with propellers and scanning eye
+  // (Replaces Wraith Skull - fast, basic enemy)
   // ══════════════════════════════════════════════════════════════════════
   void _renderWraithSkull(Canvas canvas, double s, Color color, bool flash) {
     final small = s < 14.0;
 
-    // Ghost body / tail below the skull
-    if (!flash && !small) {
-      for (int i = 0; i < 6; i++) {
-        final sw = sin(_time * 1.6 + i * pi / 3) * s * 0.22;
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset(sw, s * (0.58 + i * 0.28)),
-            width: s * (0.88 - i * 0.12).clamp(0.04, 1.0),
-            height: s * 0.26,
-          ),
-          Paint()
-            ..color = const Color(0xFF5500AA).withValues(alpha: (0.26 - i * 0.04).clamp(0, 1))
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.25),
-        );
-      }
-    }
+    // Propeller rotation effect
+    final propAngle = _time * 15.0;
 
-    // Outer spectral aura
-    canvas.drawCircle(
-      Offset(0, s * 0.05),
-      s * 1.25,
-      Paint()
-        ..color = const Color(0xFF5500BB).withValues(alpha: 0.18 + 0.07 * sin(_time * 1.9))
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 1.0),
-    );
-
-    // Wispy smoke tendrils
-    if (!flash && !small) {
-      for (int i = 0; i < 5; i++) {
-        final sw = sin(_time * 2.0 + i * pi * 0.42) * s * 0.2;
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset(sw, s * (0.46 + i * 0.18)),
-            width: s * (0.46 - i * 0.07).clamp(0.04, 0.5),
-            height: s * 0.17,
-          ),
-          Paint()
-            ..color = const Color(0x55330066)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.28),
-        );
-      }
-    }
-
-    // Drop shadow
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(0, s * 0.14), width: s * 1.05, height: s * 0.2),
-      Paint()
-        ..color = const Color(0x55000000)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-    );
-
-    // Inner skull glow pulse
+    // Outer scanning field
     if (!flash && !small) {
       canvas.drawCircle(
-        Offset(0, -s * 0.15),
-        s * 0.55,
+        Offset.zero,
+        s * 1.2,
         Paint()
-          ..color = const Color(0xFFFF4400).withValues(alpha: 0.06 + 0.04 * sin(_time * 3.2))
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.35),
+          ..color = Palette.neonCyan.withValues(
+            alpha: 0.08 + 0.04 * sin(_time * 2.5),
+          )
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.8),
       );
     }
 
-    // ─── Cranium ───
-    final boneColor = flash ? Colors.white : const Color(0xFFDDD8C0);
-    final craniumPath = Path()
-      ..moveTo(-s * 0.48, s * 0.1)
-      ..cubicTo(-s * 0.53, -s * 0.09, -s * 0.5, -s * 0.60, 0, -s * 0.64)
-      ..cubicTo(s * 0.5, -s * 0.60, s * 0.53, -s * 0.09, s * 0.48, s * 0.1)
-      ..close();
-    canvas.drawPath(craniumPath, Paint()..color = boneColor);
-
-    // Bone highlight (lighter patch top center)
-    if (!flash && !small) {
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(s * 0.07, -s * 0.3), width: s * 0.42, height: s * 0.35),
-        Paint()
-          ..color = Colors.white.withValues(alpha: 0.18)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-      );
-    }
-
-    // ─── Cracks with energy ───
-    if (!flash) {
-      final cg = 0.72 + 0.25 * sin(_time * 3.6);
-      final crackGlow = Paint()
-        ..color = const Color(0xFFFF6600).withValues(alpha: cg * 0.9)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, small ? 2.5 : 4.5)
-        ..strokeWidth = small ? 2.0 : 3.5
-        ..style = PaintingStyle.stroke;
-      final crackCore = Paint()
-        ..color = const Color(0xFFFFDD00).withValues(alpha: cg * 0.8)
-        ..strokeWidth = small ? 0.8 : 1.5
-        ..style = PaintingStyle.stroke;
-      final crackDark = Paint()
-        ..color = const Color(0xFF110400)
-        ..strokeWidth = small ? 0.6 : 1.0
-        ..style = PaintingStyle.stroke;
-
-      final c1 = Path()
-        ..moveTo(-s * 0.04, -s * 0.60)
-        ..lineTo(s * 0.11, -s * 0.34)
-        ..lineTo(s * 0.04, -s * 0.14)
-        ..lineTo(s * 0.09, -s * 0.02);
-      final c2 = Path()
-        ..moveTo(s * 0.24, -s * 0.47)
-        ..lineTo(s * 0.15, -s * 0.22)
-        ..lineTo(s * 0.2, -s * 0.08);
-      final c3 = Path()
-        ..moveTo(-s * 0.22, -s * 0.4)
-        ..lineTo(-s * 0.1, -s * 0.23);
-
-      canvas.drawPath(c1, crackGlow);
-      canvas.drawPath(c2, crackGlow..strokeWidth = small ? 1.6 : 2.5);
-      canvas.drawPath(c3, crackGlow..strokeWidth = small ? 1.4 : 2.0);
-      canvas.drawPath(c1, crackCore);
-      canvas.drawPath(c2, crackCore);
-      canvas.drawPath(c3, crackCore);
-      canvas.drawPath(c1, crackDark);
-      canvas.drawPath(c2, crackDark);
-      canvas.drawPath(c3, crackDark);
-
-      // Energy motes drifting up along main crack
-      if (!small) {
-        for (int ep = 0; ep < 5; ep++) {
-          final epT = (_time * 2.2 + ep * 0.6) % 2.0;
-          final epA = epT < 1.0 ? epT : 2.0 - epT;
-          canvas.drawCircle(
-            Offset(s * (-0.04 + ep * 0.04), s * (-0.60 + epT * 0.32)),
-            s * 0.022,
-            Paint()
-              ..color = const Color(0xFFFF9900).withValues(alpha: epA * 0.9)
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
-          );
-        }
+    // Main body - hexagonal drone body
+    final bodyPath = Path();
+    for (int i = 0; i < 6; i++) {
+      final angle = propAngle * 0.0 + i * pi / 3 - pi / 6;
+      final x = cos(angle) * s * 0.45;
+      final y = sin(angle) * s * 0.45;
+      if (i == 0) {
+        bodyPath.moveTo(x, y);
+      } else {
+        bodyPath.lineTo(x, y);
       }
     }
+    bodyPath.close();
 
-    // Cranium outline
+    // Body shadow
+    canvas.save();
+    canvas.translate(s * 0.05, s * 0.1);
     canvas.drawPath(
-      craniumPath,
+      bodyPath,
       Paint()
-        ..color = const Color(0xFF443322)
-        ..strokeWidth = small ? 1.2 : 1.8
-        ..style = PaintingStyle.stroke,
+        ..color = const Color(0x44000000)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.restore();
+
+    // Body fill
+    canvas.drawPath(
+      bodyPath,
+      Paint()..color = flash ? Palette.dataWhite : const Color(0xFF1A1A28),
     );
 
-    // ─── Nasal cavity ───
-    final nosePath = Path()
-      ..moveTo(0, -s * 0.12)
-      ..lineTo(-s * 0.09, s * 0.06)
-      ..lineTo(s * 0.09, s * 0.06)
-      ..close();
-    canvas.drawPath(nosePath, Paint()..color = const Color(0xFF080808));
+    // Body edge glow
+    canvas.drawPath(
+      bodyPath,
+      Paint()
+        ..color = (flash ? Palette.dataWhite : Palette.neonCyan).withValues(
+          alpha: 0.6,
+        )
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+
+    // Propellers (4 small rotors at corners)
     if (!small) {
-      canvas.drawPath(
-        nosePath,
-        Paint()
-          ..color = const Color(0xFF441100)
-          ..strokeWidth = 0.8
-          ..style = PaintingStyle.stroke,
-      );
+      for (int i = 0; i < 4; i++) {
+        final angle = i * pi / 2 + pi / 4;
+        final px = cos(angle) * s * 0.55;
+        final py = sin(angle) * s * 0.55;
+
+        // Propeller blur effect
+        canvas.drawCircle(
+          Offset(px, py),
+          s * 0.18,
+          Paint()
+            ..color = Palette.neonCyan.withValues(alpha: 0.3)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+        );
+
+        // Propeller blades
+        final bladeAngle1 = propAngle + i * pi / 2;
+        final bladeAngle2 = bladeAngle1 + pi;
+        canvas.drawLine(
+          Offset(
+            px + cos(bladeAngle1) * s * 0.12,
+            py + sin(bladeAngle1) * s * 0.12,
+          ),
+          Offset(
+            px + cos(bladeAngle2) * s * 0.12,
+            py + sin(bladeAngle2) * s * 0.12,
+          ),
+          Paint()
+            ..color = Palette.dataWhite.withValues(alpha: 0.4)
+            ..strokeWidth = 1.5
+            ..strokeCap = StrokeCap.round,
+        );
+      }
     }
 
-    // ─── Floating jaw ───
-    final jawFloat = sin(_time * 2.8) * s * 0.08;
-    final jawY = s * 0.2 + jawFloat;
-    final jawPath = Path()
-      ..moveTo(-s * 0.38, jawY)
-      ..lineTo(-s * 0.38, jawY + s * 0.24)
-      ..cubicTo(-s * 0.22, jawY + s * 0.36, s * 0.22, jawY + s * 0.36, s * 0.38, jawY + s * 0.24)
-      ..lineTo(s * 0.38, jawY)
-      ..cubicTo(s * 0.22, jawY - s * 0.06, -s * 0.22, jawY - s * 0.06, -s * 0.38, jawY)
-      ..close();
-    canvas.drawPath(jawPath, Paint()..color = boneColor);
-    canvas.drawPath(
-      jawPath,
+    // Central scanning eye
+    final eyePulse = 0.7 + 0.3 * sin(_time * 4.0);
+
+    // Eye glow
+    canvas.drawCircle(
+      Offset.zero,
+      s * 0.25,
       Paint()
-        ..color = const Color(0xFF443322)
-        ..strokeWidth = small ? 0.8 : 1.2
-        ..style = PaintingStyle.stroke,
+        ..color = (flash ? Palette.alertRed : Palette.alertRed).withValues(
+          alpha: 0.4 * eyePulse,
+        )
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.15),
     );
 
-    // ─── Teeth ───
-    if (!flash) {
-      final teethPaint = Paint()..color = const Color(0xFFF0ECDC);
-      final chippedPaint = Paint()..color = const Color(0xFFCCC8B0);
-      final tOut = Paint()
-        ..color = const Color(0xFF443322)
-        ..strokeWidth = 0.7
-        ..style = PaintingStyle.stroke;
+    // Eye outer ring
+    canvas.drawCircle(
+      Offset.zero,
+      s * 0.22,
+      Paint()
+        ..color = const Color(0xFF2A2A3A)
+        ..style = PaintingStyle.fill,
+    );
 
-      // Upper teeth (from cranium bottom)
-      for (int i = -3; i <= 3; i++) {
-        final tx = i * s * 0.09;
-        final h2 = s * (i.abs() % 2 == 0 ? 0.19 : 0.13);
-        final chipped = (i == -2 || i == 1);
-        final tp = Path()
-          ..moveTo(tx - s * 0.038, s * 0.1)
-          ..lineTo(tx + (chipped ? s * 0.012 : 0), s * 0.1 - h2)
-          ..lineTo(tx + s * 0.038, s * 0.1)
-          ..close();
-        canvas.drawPath(tp, chipped ? chippedPaint : teethPaint);
-        if (!small) canvas.drawPath(tp, tOut);
-      }
-      // Lower teeth (on jaw)
-      for (int i = -2; i <= 2; i++) {
-        final tx = i * s * 0.1;
-        final h2 = s * (i.abs() % 2 == 0 ? 0.14 : 0.09);
-        final tp = Path()
-          ..moveTo(tx - s * 0.034, jawY)
-          ..lineTo(tx, jawY - h2)
-          ..lineTo(tx + s * 0.034, jawY)
-          ..close();
-        canvas.drawPath(tp, teethPaint);
-        if (!small) canvas.drawPath(tp, tOut);
-      }
-    }
+    // Eye inner (lens)
+    canvas.drawCircle(
+      Offset.zero,
+      s * 0.14,
+      Paint()..color = flash ? Palette.dataWhite : Palette.alertRed,
+    );
 
-    // ─── Eye sockets ───
-    for (final ex in [-s * 0.17, s * 0.17]) {
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(ex, -s * 0.17), width: s * 0.26, height: s * 0.3),
-        Paint()..color = const Color(0xFF060606),
+    // Pupil highlight
+    canvas.drawCircle(
+      Offset(-s * 0.04, -s * 0.04),
+      s * 0.04,
+      Paint()..color = Palette.dataWhite.withValues(alpha: 0.7),
+    );
+
+    // Scanning beam (when not flashing)
+    if (!flash && !small) {
+      final scanY = sin(_time * 3.0) * s * 0.3;
+      canvas.drawLine(
+        Offset(-s * 0.4, s * 0.35 + scanY),
+        Offset(s * 0.4, s * 0.35 + scanY),
+        Paint()
+          ..color = Palette.alertRed.withValues(alpha: 0.3)
+          ..strokeWidth = 2
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
       );
     }
 
-    // ─── Erupting eye flames ───
-    if (!flash) {
-      final lfb = 0.55 + 0.35 * sin(_time * 4.5);
-      final rfb = 0.55 + 0.35 * sin(_time * 3.9 + 1.1);
-      final int flameLayers = small ? 2 : 4;
-
-      // Left: hellfire orange-to-yellow jets
-      for (int fl = 0; fl < flameLayers; fl++) {
-        final fw = sin(_time * (4.0 + fl * 0.7) + fl * 1.3) * s * 0.06;
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset(-s * 0.17 + fw, -s * (0.17 + fl * 0.2)),
-            width: s * (0.24 - fl * 0.045).clamp(0.04, 0.26),
-            height: s * 0.22,
-          ),
-          Paint()
-            ..color = [
-              const Color(0xFFFF4400),
-              const Color(0xFFFF8800),
-              const Color(0xFFFFCC00),
-              const Color(0xFFFFFF88),
-            ][fl].withValues(alpha: (lfb - fl * 0.1).clamp(0.0, 1.0))
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, (4.5 - fl * 0.8).clamp(1.0, 5.0)),
+    // Status LED lights
+    if (!small) {
+      final ledColors = [
+        Palette.dataGreen,
+        Palette.alertAmber,
+        Palette.neonCyan,
+      ];
+      for (int i = 0; i < 3; i++) {
+        final ledX = (i - 1) * s * 0.12;
+        final ledY = s * 0.35;
+        final ledOn = (((_time * 2).floor() + i) % 3) == 0;
+        canvas.drawCircle(
+          Offset(ledX, ledY),
+          s * 0.03,
+          Paint()..color = ledColors[i].withValues(alpha: ledOn ? 0.9 : 0.2),
         );
-      }
-      canvas.drawCircle(
-        Offset(-s * 0.17, -s * 0.2),
-        s * 0.055,
-        Paint()..color = const Color(0xFFFFFFCC).withValues(alpha: 0.95),
-      );
-
-      // Right: spectral cyan jets
-      for (int fl = 0; fl < flameLayers; fl++) {
-        final fw = sin(_time * (3.6 + fl * 0.8) + fl * 1.6) * s * 0.06;
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset(s * 0.17 + fw, -s * (0.17 + fl * 0.2)),
-            width: s * (0.24 - fl * 0.045).clamp(0.04, 0.26),
-            height: s * 0.22,
-          ),
-          Paint()
-            ..color = [
-              const Color(0xFF00CCFF),
-              const Color(0xFF44EEFF),
-              const Color(0xFF99FFFF),
-              const Color(0xFFDDFFFF),
-            ][fl].withValues(alpha: (rfb - fl * 0.1).clamp(0.0, 1.0))
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, (4.5 - fl * 0.8).clamp(1.0, 5.0)),
-        );
-      }
-      canvas.drawCircle(
-        Offset(s * 0.17, -s * 0.2),
-        s * 0.055,
-        Paint()..color = Colors.white.withValues(alpha: 0.95),
-      );
-
-      // Skull-top plumes (4 flame columns rising from crown)
-      if (!small) {
-        for (int i = 0; i < 4; i++) {
-          final fi = sin(_time * (5.0 + i * 1.5) + i * 1.2) * s * 0.1;
-          canvas.drawOval(
-            Rect.fromCenter(
-              center: Offset((-1.5 + i) * s * 0.22, -s * 0.64 - s * (0.2 + i % 2 * 0.07) - fi),
-              width: s * (0.17 - i * 0.02).clamp(0.04, 0.2),
-              height: s * 0.32,
-            ),
-            Paint()
-              ..color = [
-                const Color(0xFFFF5500),
-                const Color(0xFFFF2200),
-                const Color(0xFF9900EE),
-                const Color(0xFF5500BB),
-              ][i].withValues(alpha: 0.5 - i * 0.06)
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-          );
-        }
       }
     }
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // VOID EYE — monstrous bloodshot eyeball with eyelids and tentacles
+  // SENTINEL — Scanning surveillance orb with multiple lenses
+  // (Replaces Void Eye - stops and charges laser attack)
   // ══════════════════════════════════════════════════════════════════════
   void _renderVoidEye(Canvas canvas, double s, Color color, bool flash) {
     final small = s < 14.0;
 
-    // Eldritch outer aura
-    canvas.drawCircle(
-      Offset.zero,
-      s * 1.1,
-      Paint()
-        ..color = const Color(0xFF880088).withValues(alpha: 0.22 + 0.07 * sin(_time * 2.1))
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.95),
-    );
+    // Shield ring rotation
+    final shieldAngle = _time * 1.5;
 
-    if (flash) {
-      canvas.drawCircle(Offset.zero, s * 0.55, Paint()..color = Colors.white);
-      return;
-    }
-
-    // ─── Tentacles (6 total, beneath sclera) ───
-    final int tentacleCount = small ? 4 : 6;
-    final tentaclePaint = Paint()
-      ..color = const Color(0xFF220033).withValues(alpha: 0.8)
-      ..strokeWidth = s * (small ? 0.04 : 0.06)
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    for (int t = 0; t < tentacleCount; t++) {
-      final tAng = t * (pi * 2 / tentacleCount) + _time * 0.25;
-      final tWave = sin(_time * 2.8 + t * 1.1) * 0.3;
-      final tLen = s * (0.95 + 0.15 * sin(_time * 1.5 + t));
-      final tPath = Path()
-        ..moveTo(cos(tAng) * s * 0.42, sin(tAng) * s * 0.42)
-        ..quadraticBezierTo(
-          cos(tAng + tWave) * s * 0.72,
-          sin(tAng + tWave) * s * 0.72,
-          cos(tAng + tWave * 1.8) * tLen,
-          sin(tAng + tWave * 1.8) * tLen,
-        );
-      canvas.drawPath(tPath, tentaclePaint);
-      // Sucker tip highlight
-      if (!small) {
-        canvas.drawCircle(
-          Offset(cos(tAng + tWave * 1.8) * tLen, sin(tAng + tWave * 1.8) * tLen),
-          s * 0.04,
-          Paint()..color = const Color(0xFF660066).withValues(alpha: 0.6),
-        );
-      }
-    }
-
-    // ─── Sclera (main eyeball) ───
-    final scleraShader = RadialGradient(
-      colors: [const Color(0xFFF5F0D8), const Color(0xFFE0CEB0), const Color(0xFFC8A888)],
-      stops: const [0.0, 0.65, 1.0],
-    ).createShader(Rect.fromCircle(center: Offset.zero, radius: s * 0.52));
-    canvas.drawCircle(Offset.zero, s * 0.52, Paint()..shader = scleraShader);
-
-    // ─── Blood veins (8 branching paths) ───
-    final veinPaint = Paint()
-      ..color = const Color(0xFFCC2222).withValues(alpha: 0.55)
-      ..strokeWidth = small ? 0.7 : 1.1
-      ..style = PaintingStyle.stroke;
-    for (int i = 0; i < 8; i++) {
-      final ang = i * pi / 4 + _time * 0.1;
-      final veinPath = Path()
-        ..moveTo(cos(ang) * s * 0.14, sin(ang) * s * 0.14)
-        ..quadraticBezierTo(
-          cos(ang + 0.15) * s * 0.34,
-          sin(ang + 0.15) * s * 0.34,
-          cos(ang + 0.02) * s * 0.46,
-          sin(ang + 0.02) * s * 0.46,
-        );
-      canvas.drawPath(veinPath, veinPaint);
-
-      // Sub-branch
-      if (!small && i % 2 == 0) {
-        final bAng = ang + 0.22;
-        canvas.drawLine(
-          Offset(cos(bAng) * s * 0.28, sin(bAng) * s * 0.28),
-          Offset(cos(bAng) * s * 0.44, sin(bAng) * s * 0.44),
-          veinPaint..color = const Color(0xFFCC2222).withValues(alpha: 0.3),
-        );
-      }
-    }
-
-    // ─── Iris with sweep gradient ───
-    final irisR = s * 0.26;
-    final irisShader = SweepGradient(
-      colors: [color, color.withValues(alpha: 0.55), Palette.fireDeep, color],
-      transform: GradientRotation(_time * 0.45),
-    ).createShader(Rect.fromCircle(center: Offset.zero, radius: irisR));
-    canvas.drawCircle(Offset.zero, irisR, Paint()..shader = irisShader);
-
-    // Iris inner ring detail
-    if (!small) {
+    // Outer scanning field glow
+    if (!flash) {
       canvas.drawCircle(
         Offset.zero,
-        irisR * 0.82,
+        s * 1.3,
         Paint()
-          ..color = color.withValues(alpha: 0.4)
-          ..strokeWidth = 1.2
-          ..style = PaintingStyle.stroke,
+          ..color = Palette.neonMagenta.withValues(
+            alpha: 0.08 + 0.04 * sin(_time * 2.5),
+          )
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.8),
       );
-      // Rune marks rotating around iris
-      final runePaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.25)
-        ..strokeWidth = 0.9
-        ..style = PaintingStyle.stroke;
-      for (int r = 0; r < 6; r++) {
-        final ra = r * pi / 3 - _time * 0.8;
-        final rx = cos(ra) * s * 0.16;
-        final ry = sin(ra) * s * 0.16;
-        canvas.drawLine(Offset(rx - s * 0.02, ry), Offset(rx + s * 0.02, ry), runePaint);
-        canvas.drawLine(Offset(rx, ry - s * 0.02), Offset(rx, ry + s * 0.02), runePaint);
-      }
     }
 
-    canvas.drawCircle(Offset.zero, irisR * 0.65, Paint()..color = color.withValues(alpha: 0.7));
-
-    // ─── Slit pupil ───
-    final slitPath = Path()
-      ..moveTo(0, -s * 0.14)
-      ..cubicTo(-s * 0.03, -s * 0.07, -s * 0.03, s * 0.07, 0, s * 0.14)
-      ..cubicTo(s * 0.03, s * 0.07, s * 0.03, -s * 0.07, 0, -s * 0.14)
-      ..close();
-    canvas.drawPath(slitPath, Paint()..color = const Color(0xFF000000));
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset.zero, width: s * 0.04, height: s * 0.1),
-      Paint()
-        ..color = const Color(0x99FF2200)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
-    // Specular highlight
-    canvas.drawCircle(
-      Offset(-s * 0.06, -s * 0.07),
-      s * 0.028,
-      Paint()..color = Colors.white.withValues(alpha: 0.55),
-    );
-
-    // ─── Top eyelid (sinister droop) ───
+    // Rotating shield ring
     if (!small) {
-      final lidDroop = s * 0.06 + sin(_time * 0.7) * s * 0.04;
-      final lidPath = Path()
-        ..moveTo(-s * 0.52, -s * 0.04)
-        ..cubicTo(-s * 0.28, -s * 0.52 - lidDroop, s * 0.28, -s * 0.52 - lidDroop, s * 0.52, -s * 0.04)
-        ..close();
-      canvas.drawPath(
-        lidPath,
-        Paint()
-          ..color = const Color(0xFF331122)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-      );
-      // Eyelid edge line
-      canvas.drawPath(
-        Path()
-          ..moveTo(-s * 0.52, -s * 0.04)
-          ..cubicTo(-s * 0.28, -s * 0.52 - lidDroop, s * 0.28, -s * 0.52 - lidDroop, s * 0.52, -s * 0.04),
-        Paint()
-          ..color = const Color(0xFF551133)
-          ..strokeWidth = 1.4
-          ..style = PaintingStyle.stroke,
-      );
+      final ringPaint = Paint()
+        ..color = Palette.neonMagenta.withValues(alpha: 0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+
+      canvas.save();
+      canvas.rotate(shieldAngle);
+      for (int i = 0; i < 8; i++) {
+        final angle = i * pi / 4;
+        final arcStart = angle - pi / 12;
+        final arcEnd = angle + pi / 12;
+        canvas.drawArc(
+          Rect.fromCircle(center: Offset.zero, radius: s * 0.7),
+          arcStart,
+          arcEnd - arcStart,
+          false,
+          ringPaint,
+        );
+      }
+      canvas.restore();
     }
 
-    // ─── 3 Orbiting mini-eyes ───
-    for (int me = 0; me < 3; me++) {
-      final meAngle = me * pi * 2 / 3 + _time * 0.7;
-      final meX = cos(meAngle) * s * 0.78;
-      final meY = sin(meAngle) * s * 0.78;
-      canvas.drawCircle(
-        Offset(meX, meY),
-        s * 0.13,
-        Paint()
-          ..color = color.withValues(alpha: 0.3)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
-      );
-      canvas.drawCircle(Offset(meX, meY), s * 0.11, Paint()..color = const Color(0xFFEDE8C4));
-      canvas.drawCircle(Offset(meX, meY), s * 0.065, Paint()..color = color);
-      canvas.drawCircle(Offset(meX, meY), s * 0.035, Paint()..color = const Color(0xFF000000));
-      // Mini specular
-      canvas.drawCircle(
-        Offset(meX - s * 0.03, meY - s * 0.03),
-        s * 0.015,
-        Paint()..color = Colors.white.withValues(alpha: 0.5),
-      );
-    }
+    // Main orb body
+    final orbGradient = RadialGradient(
+      colors: [
+        const Color(0xFF2A2A3A),
+        const Color(0xFF1A1A28),
+        const Color(0xFF0A0A14),
+      ],
+      stops: const [0.0, 0.6, 1.0],
+    ).createShader(Rect.fromCircle(center: Offset.zero, radius: s * 0.52));
 
-    // Sclera outline
+    canvas.drawCircle(Offset.zero, s * 0.52, Paint()..shader = orbGradient);
+
+    // Orb edge glow
     canvas.drawCircle(
       Offset.zero,
       s * 0.52,
       Paint()
-        ..color = const Color(0xFF441111)
-        ..strokeWidth = small ? 1.2 : 2.2
-        ..style = PaintingStyle.stroke,
+        ..color = (flash ? Palette.dataWhite : Palette.neonMagenta).withValues(
+          alpha: 0.5,
+        )
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0,
     );
 
-    // ─── Fluid drips ───
-    for (int d = 0; d < 3; d++) {
-      final drop = sin(_time * 1.3 + d * 1.9) * 0.5 + 0.5;
-      final dY = s * 0.58 + drop * s * 0.34;
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset((-1 + d) * s * 0.18, dY),
-          width: s * 0.09,
-          height: s * 0.16 * drop,
-        ),
+    // Charging laser attack
+    if (isEyeballCharging) {
+      final chargeRatio = (_eyeballChargeTimer / 1.5).clamp(0.0, 1.0);
+
+      // "TARGET ACQUIRED" pulsing
+      canvas.drawCircle(
+        Offset.zero,
+        s * 0.7,
         Paint()
-          ..color = color.withValues(alpha: 0.65)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+          ..color = Palette.alertRed.withValues(
+            alpha: 0.5 * chargeRatio * (0.5 + 0.5 * sin(_time * 10)),
+          )
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0,
+      );
+
+      // Targeting laser
+      final laserPaint = Paint()
+        ..color = Palette.alertRed.withValues(alpha: 0.7 * chargeRatio)
+        ..strokeWidth = s * 0.06 * chargeRatio
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+      canvas.drawLine(Offset.zero, Offset(0, s * 60), laserPaint);
+
+      // Intense glow
+      canvas.drawCircle(
+        Offset.zero,
+        s * 0.4 * chargeRatio,
+        Paint()
+          ..color = Palette.alertRed.withValues(alpha: 0.6 * chargeRatio)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.25),
+      );
+    }
+
+    // Multiple scanning lenses (3 around the main eye)
+    if (!small && !flash) {
+      for (int i = 0; i < 3; i++) {
+        final lensAngle = i * pi * 2 / 3 + _time * 0.5;
+        final lx = cos(lensAngle) * s * 0.32;
+        final ly = sin(lensAngle) * s * 0.32;
+
+        // Lens housing
+        canvas.drawCircle(
+          Offset(lx, ly),
+          s * 0.12,
+          Paint()..color = const Color(0xFF1A1A28),
+        );
+        // Lens glass
+        canvas.drawCircle(
+          Offset(lx, ly),
+          s * 0.08,
+          Paint()..color = Palette.neonCyan.withValues(alpha: 0.6),
+        );
+        // Lens highlight
+        canvas.drawCircle(
+          Offset(lx - s * 0.02, ly - s * 0.02),
+          s * 0.025,
+          Paint()..color = Palette.dataWhite.withValues(alpha: 0.6),
+        );
+      }
+    }
+
+    // Central main eye
+    final mainEyeColor = flash
+        ? Palette.dataWhite
+        : (isEyeballCharging ? Palette.alertRed : Palette.neonMagenta);
+
+    // Eye socket
+    canvas.drawCircle(
+      Offset.zero,
+      s * 0.28,
+      Paint()..color = const Color(0xFF0A0A14),
+    );
+
+    // Iris
+    canvas.drawCircle(
+      Offset.zero,
+      s * 0.22,
+      Paint()..color = mainEyeColor.withValues(alpha: 0.8),
+    );
+
+    // Pupil
+    canvas.drawCircle(
+      Offset.zero,
+      s * 0.12,
+      Paint()..color = const Color(0xFF080810),
+    );
+
+    // Pupil glow
+    final pupilGlow = 0.5 + 0.5 * sin(_time * 3);
+    canvas.drawCircle(
+      Offset.zero,
+      s * 0.08,
+      Paint()
+        ..color = mainEyeColor.withValues(alpha: 0.6 * pupilGlow)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+
+    // Specular highlight
+    canvas.drawCircle(
+      Offset(-s * 0.08, -s * 0.08),
+      s * 0.04,
+      Paint()..color = Palette.dataWhite.withValues(alpha: 0.7),
+    );
+
+    // Data streams emanating from orb
+    if (!small && !flash) {
+      for (int d = 0; d < 4; d++) {
+        final streamAngle = d * pi / 2 + _time * 0.3;
+        final streamLen = s * 0.8 + sin(_time * 2 + d) * s * 0.1;
+
+        canvas.drawLine(
+          Offset(cos(streamAngle) * s * 0.55, sin(streamAngle) * s * 0.55),
+          Offset(cos(streamAngle) * streamLen, sin(streamAngle) * streamLen),
+          Paint()
+            ..color = Palette.neonMagenta.withValues(alpha: 0.3)
+            ..strokeWidth = 1.5
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+    }
+
+    // "SCANNING" indicator text equivalent (visual marker)
+    if (!flash && !small) {
+      final scanPulse = 0.5 + 0.5 * sin(_time * 4);
+      canvas.drawCircle(
+        Offset(0, s * 0.65),
+        s * 0.04,
+        Paint()..color = Palette.dataGreen.withValues(alpha: 0.8 * scanPulse),
       );
     }
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // ACID BLOB — toxic slime with trapped skulls and corrosive drips
+  // GLITCH — Corrupted data entity with pixelated, unstable form
+  // (Replaces Acid Blob - drops corruption zones)
   // ══════════════════════════════════════════════════════════════════════
   void _renderAcidBlob(Canvas canvas, double s, Color color, bool flash) {
     final small = s < 14.0;
 
-    // Corrosive ground puddle
+    // Corruption ground zone
     if (!flash && !small) {
       canvas.drawOval(
-        Rect.fromCenter(center: Offset(0, s * 0.7), width: s * 1.3, height: s * 0.22),
+        Rect.fromCenter(
+          center: Offset(0, s * 0.7),
+          width: s * 1.3,
+          height: s * 0.22,
+        ),
         Paint()
-          ..color = const Color(0xFF66CC00).withValues(alpha: 0.18 + 0.06 * sin(_time * 2.0))
+          ..color = Palette.dataPurple.withValues(
+            alpha: 0.18 + 0.06 * sin(_time * 2.0),
+          )
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.3),
       );
     }
 
-    // Toxic aura
+    // Glitch distortion field
     canvas.drawCircle(
-      Offset(0, s * 0.05),
+      Offset(sin(_time * 8) * s * 0.05, cos(_time * 6) * s * 0.05),
       s * 0.88,
       Paint()
-        ..color = const Color(0xFF00FF44).withValues(alpha: 0.1 + 0.04 * sin(_time * 2.8))
+        ..color = Palette.dataPurple.withValues(
+          alpha: 0.1 + 0.04 * sin(_time * 2.8),
+        )
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.72),
     );
 
-    // ─── Acid drips ───
-    if (!flash) {
-      for (int d = 0; d < 5; d++) {
-        final drip = sin(_time * 1.1 + d * 1.7) * 0.5 + 0.5;
-        final dY = s * 0.5 + drip * s * 0.44;
-        final dX = (-2 + d) * s * 0.16;
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset(dX, dY),
-            width: s * 0.09,
-            height: s * 0.2 * drip,
-          ),
-          Paint()
-            ..color = color.withValues(alpha: 0.72)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-        );
-        // Drip tip teardrop
-        if (!small && drip > 0.5) {
-          canvas.drawCircle(
-            Offset(dX, dY + s * 0.1 * drip),
-            s * 0.045,
-            Paint()..color = color.withValues(alpha: 0.5),
-          );
-        }
-      }
-    }
-
-    // ─── Outer blob body ───
-    final wobX = sin(_time * 2.9) * s * 0.045;
-    final wobY = cos(_time * 5.2) * s * 0.032;
-    final wobX2 = cos(_time * 3.7) * s * 0.03;
-    final blobPath = Path()
-      ..moveTo(0, -s * 0.52 + wobX)
-      ..cubicTo(
-        s * 0.38 + wobY,
-        -s * 0.56,
-        s * 0.58 + wobX,
-        -s * 0.18,
-        s * 0.52,
-        s * 0.14 + wobY,
-      )
-      ..cubicTo(s * 0.46, s * 0.52, -s * 0.46, s * 0.52, -s * 0.52, s * 0.14 + wobX)
-      ..cubicTo(
-        -s * 0.58 + wobX2,
-        -s * 0.18,
-        -s * 0.38,
-        -s * 0.56 + wobY,
-        0,
-        -s * 0.52 + wobX,
-      )
-      ..close();
-
-    canvas.drawPath(
-      blobPath,
-      Paint()..color = flash ? Colors.white : color.withValues(alpha: 0.75),
+    // Core glitch body - pixelated appearance
+    final glitchOffset = Offset(
+      sin(_time * 10) * s * 0.04,
+      cos(_time * 12) * s * 0.03,
     );
 
-    if (!flash) {
-      // Inner acid radial glow
-      final coreShader = RadialGradient(
-        colors: [
-          const Color(0xFFDDFF00).withValues(alpha: 0.95),
-          color.withValues(alpha: 0.62),
-          color.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 0.45, 1.0],
-      ).createShader(Rect.fromCircle(center: Offset(0, wobX), radius: s * 0.34));
-      canvas.drawCircle(Offset(0, wobX), s * 0.34, Paint()..shader = coreShader);
-
-      // Toxic gas wisps rising from top
-      if (!small) {
-        for (int g = 0; g < 4; g++) {
-          final gt = (_time * 1.4 + g * 0.8) % 2.5;
-          final gA = (gt < 1.0 ? gt : (2.5 - gt) / 1.5).clamp(0.0, 1.0);
-          final gX = (-1.5 + g) * s * 0.2 + sin(_time * 2.5 + g) * s * 0.08;
-          canvas.drawCircle(
-            Offset(gX, -s * 0.52 - gt * s * 0.35),
-            s * (0.08 + gt * 0.04),
-            Paint()
-              ..color = const Color(0xFF88FF44).withValues(alpha: gA * 0.38)
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-          );
-        }
-      }
-
-      // ─── Trapped skulls (2 visible inside) ───
-      final sk1 = const Color(0xFF3A5A3A).withValues(alpha: 0.52);
-      final sk2 = const Color(0xFF284428).withValues(alpha: 0.42);
-      // Skull 1
-      canvas.drawCircle(Offset(s * 0.06, wobX - s * 0.04), s * 0.16, Paint()..color = sk1);
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(-s * 0.04 + s * 0.06, wobX - s * 0.08),
-          width: s * 0.07,
-          height: s * 0.09,
-        ),
-        Paint()..color = const Color(0xFF001800).withValues(alpha: 0.6),
+    if (flash) {
+      canvas.drawRect(
+        Rect.fromCenter(center: glitchOffset, width: s * 0.8, height: s * 0.8),
+        Paint()..color = Palette.dataWhite,
       );
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(s * 0.1, wobX - s * 0.08),
-          width: s * 0.07,
-          height: s * 0.09,
-        ),
-        Paint()..color = const Color(0xFF001800).withValues(alpha: 0.6),
-      );
-      // Skull 2 (smaller, offset)
-      if (!small) {
-        canvas.drawCircle(Offset(-s * 0.18, wobX + s * 0.08), s * 0.1, Paint()..color = sk2);
-        canvas.drawOval(
-          Rect.fromCenter(center: Offset(-s * 0.22, wobX + s * 0.04), width: s * 0.05, height: s * 0.06),
-          Paint()..color = const Color(0xFF001800).withValues(alpha: 0.5),
-        );
-        canvas.drawOval(
-          Rect.fromCenter(center: Offset(-s * 0.14, wobX + s * 0.04), width: s * 0.05, height: s * 0.06),
-          Paint()..color = const Color(0xFF001800).withValues(alpha: 0.5),
-        );
-      }
+      return;
+    }
 
-      // ─── Surface bubbles ───
-      final int bubCount = small ? 5 : 9;
-      for (int b = 0; b < bubCount; b++) {
-        final bAng = b * pi * 2 / bubCount + _time * 0.5;
-        final bDist = s * (0.36 + 0.04 * sin(_time * 3.0 + b));
-        final bSize = s * (0.04 + 0.022 * sin(_time * 4.5 + b));
-        final bAlpha = 0.3 + 0.15 * sin(_time * 2.2 + b);
-        canvas.drawCircle(
-          Offset(cos(bAng) * bDist, sin(bAng) * bDist),
-          bSize,
-          Paint()..color = const Color(0xFF99FF88).withValues(alpha: bAlpha),
-        );
-        // Bubble highlight
-        canvas.drawCircle(
-          Offset(cos(bAng) * bDist - bSize * 0.35, sin(bAng) * bDist - bSize * 0.35),
-          bSize * 0.28,
-          Paint()..color = Colors.white.withValues(alpha: 0.35),
-        );
-      }
+    // Draw pixelated blocks that form the glitch body
+    final rng = Random((_time * 2).floor());
+    final blockSize = s * 0.12;
+    for (int x = -3; x <= 3; x++) {
+      for (int y = -3; y <= 3; y++) {
+        final dist = sqrt(x * x + y * y.toDouble());
+        if (dist > 3.5) continue;
+        if (rng.nextDouble() > 0.7 - dist * 0.1) continue;
 
-      // Corruption arc overlays
-      for (int a = 0; a < 3; a++) {
-        final arcAng = _time * 2.0 + a * pi * 2 / 3;
-        canvas.drawArc(
-          Rect.fromCircle(center: Offset.zero, radius: s * (0.38 + a * 0.1)),
-          arcAng,
-          pi * 0.7,
-          false,
-          Paint()
-            ..color = const Color(0xFFAAFF00).withValues(alpha: 0.3)
-            ..strokeWidth = 1.6
-            ..style = PaintingStyle.stroke
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+        final blockAlpha = (0.8 - dist * 0.15).clamp(0.2, 0.9);
+        final jitterX = sin(_time * 15 + x * y) * s * 0.02;
+        final jitterY = cos(_time * 12 + x + y) * s * 0.02;
+
+        canvas.drawRect(
+          Rect.fromCenter(
+            center:
+                Offset(x * blockSize + jitterX, y * blockSize + jitterY) +
+                glitchOffset,
+            width: blockSize * 0.9,
+            height: blockSize * 0.9,
+          ),
+          Paint()..color = Palette.dataPurple.withValues(alpha: blockAlpha),
         );
       }
     }
 
-    // Blob outline
-    if (!flash) {
-      canvas.drawPath(
-        blobPath,
-        Paint()
-          ..color = const Color(0xFF228822)
-          ..strokeWidth = small ? 1.0 : 1.8
-          ..style = PaintingStyle.stroke
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1),
-      );
+    // Chromatic aberration effect - offset copies
+    if (!small) {
+      for (int x = -2; x <= 2; x++) {
+        for (int y = -2; y <= 2; y++) {
+          final dist = sqrt(x * x + y * y.toDouble());
+          if (dist > 2.5 || rng.nextDouble() > 0.5) continue;
+
+          // Red shifted
+          canvas.drawRect(
+            Rect.fromCenter(
+              center:
+                  Offset(x * blockSize - s * 0.03, y * blockSize) +
+                  glitchOffset,
+              width: blockSize * 0.7,
+              height: blockSize * 0.7,
+            ),
+            Paint()..color = Palette.glitchRed.withValues(alpha: 0.3),
+          );
+          // Blue shifted
+          canvas.drawRect(
+            Rect.fromCenter(
+              center:
+                  Offset(x * blockSize + s * 0.03, y * blockSize) +
+                  glitchOffset,
+              width: blockSize * 0.7,
+              height: blockSize * 0.7,
+            ),
+            Paint()..color = Palette.glitchBlue.withValues(alpha: 0.3),
+          );
+        }
+      }
+    }
+
+    // Central corruption eye
+    final eyePulse = 0.6 + 0.4 * sin(_time * 5);
+    canvas.drawCircle(
+      glitchOffset,
+      s * 0.2,
+      Paint()
+        ..color = Palette.corruption.withValues(alpha: 0.5 * eyePulse)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.drawCircle(
+      glitchOffset,
+      s * 0.12,
+      Paint()..color = Palette.corruption,
+    );
+    canvas.drawCircle(
+      glitchOffset,
+      s * 0.06,
+      Paint()..color = Palette.dataWhite.withValues(alpha: 0.8),
+    );
+
+    // Glitch scan lines passing through
+    if (!small) {
+      for (int i = 0; i < 3; i++) {
+        final lineY = (((_time * 3 + i * 0.5) % 1.0) - 0.5) * s * 1.2;
+        canvas.drawLine(
+          Offset(-s * 0.6, lineY + glitchOffset.dy),
+          Offset(s * 0.6, lineY + glitchOffset.dy),
+          Paint()
+            ..color = Palette.dataWhite.withValues(alpha: 0.4)
+            ..strokeWidth = 1.5,
+        );
+      }
+    }
+
+    // Floating data fragments
+    if (!small) {
+      for (int f = 0; f < 6; f++) {
+        final fAngle = f * pi / 3 + _time * 0.8;
+        final fDist = s * 0.55 + sin(_time * 3 + f) * s * 0.1;
+        final fx = cos(fAngle) * fDist + glitchOffset.dx;
+        final fy = sin(fAngle) * fDist + glitchOffset.dy;
+
+        canvas.drawRect(
+          Rect.fromCenter(
+            center: Offset(fx, fy),
+            width: s * 0.1,
+            height: s * 0.06,
+          ),
+          Paint()
+            ..color = Palette.neonCyan.withValues(
+              alpha: 0.5 + 0.3 * sin(_time * 4 + f),
+            ),
+        );
+      }
+    }
+
+    // "ERROR" visual indicator
+    if (!small) {
+      final errorPulse = ((_time * 3) % 1.0 < 0.1) ? 1.0 : 0.0;
+      if (errorPulse > 0) {
+        canvas.drawRect(
+          Rect.fromCenter(
+            center: Offset(0, -s * 0.7),
+            width: s * 0.8,
+            height: s * 0.15,
+          ),
+          Paint()..color = Palette.alertRed.withValues(alpha: 0.6),
+        );
+      }
     }
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // DREAD KNIGHT — undead armored warrior with dark greatsword
+  // ENFORCER — Riot control mech with energy shield
+  // (Replaces Dread Knight - charges with shield raised)
   // ══════════════════════════════════════════════════════════════════════
   void _renderDreadKnight(Canvas canvas, double s, Color color, bool flash) {
     final small = s < 14.0;
 
-    // Dark aura
+    // Danger aura
     canvas.drawCircle(
       Offset(0, s * 0.1),
       s * 0.85,
       Paint()
-        ..color = const Color(0xFF221133).withValues(alpha: 0.35)
+        ..color = Palette.alertRed.withValues(alpha: 0.2 + 0.1 * sin(_time * 2))
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.65),
     );
 
-    // Ground mist
-    if (!flash && !small) {
-      for (int f = 0; f < 4; f++) {
-        final fx = (-1.5 + f) * s * 0.22;
-        canvas.drawOval(
-          Rect.fromCenter(center: Offset(fx, s * 0.7), width: s * (0.28 + f * 0.04), height: s * 0.1),
-          Paint()
-            ..color = const Color(0x44551155)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
-        );
-      }
-    }
-
-    // ─── Dark greatsword (left side) ───
-    if (!flash) {
-      final swordSway = sin(_time * 1.4) * s * 0.04;
-      // Blade
-      final bladePath = Path()
-        ..moveTo(-s * 0.58 + swordSway, -s * 0.82)
-        ..lineTo(-s * 0.52 + swordSway, -s * 0.96)
-        ..lineTo(-s * 0.44 + swordSway, -s * 0.82)
-        ..lineTo(-s * 0.48 + swordSway, s * 0.32)
-        ..lineTo(-s * 0.56 + swordSway, s * 0.32)
-        ..close();
-      // Blade glow
-      canvas.drawPath(
-        bladePath,
-        Paint()
-          ..color = const Color(0xFF330066).withValues(alpha: 0.6)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, small ? 3 : 6),
-      );
-      canvas.drawPath(bladePath, Paint()..color = small ? const Color(0xFF5A4A7A) : const Color(0xFF443355));
-      // Blade edge highlight
-      canvas.drawLine(
-        Offset(-s * 0.52 + swordSway, -s * 0.96),
-        Offset(-s * 0.5 + swordSway, s * 0.32),
-        Paint()
-          ..color = const Color(0xFF8866AA).withValues(alpha: 0.7)
-          ..strokeWidth = small ? 0.6 : 1.0,
-      );
-      // Energy rune on blade
-      if (!small) {
-        final rg = 0.5 + 0.4 * sin(_time * 3.0);
-        canvas.drawOval(
+    // Charge effect - motion blur behind
+    if (isKnightCharging) {
+      for (int i = 1; i <= 4; i++) {
+        canvas.drawRect(
           Rect.fromCenter(
-            center: Offset(-s * 0.5 + swordSway, -s * 0.28),
-            width: s * 0.08,
-            height: s * 0.16,
+            center: Offset(0, -s * i * 0.5),
+            width: s * 0.8,
+            height: s * 1.2,
           ),
           Paint()
-            ..color = const Color(0xFFAA44FF).withValues(alpha: rg * 0.7)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+            ..color = Palette.alertRed.withValues(alpha: 0.25 / i)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.4),
         );
       }
-      // Guard/crossguard
-      final guardPath = Path()
-        ..moveTo(-s * 0.72 + swordSway, s * 0.32)
-        ..lineTo(-s * 0.3 + swordSway, s * 0.32)
-        ..lineTo(-s * 0.3 + swordSway, s * 0.42)
-        ..lineTo(-s * 0.72 + swordSway, s * 0.42)
-        ..close();
-      canvas.drawPath(guardPath, Paint()..color = const Color(0xFF3A3050));
-      canvas.drawPath(
-        guardPath,
-        Paint()
-          ..color = const Color(0xFF6A5A88)
-          ..strokeWidth = 0.8
-          ..style = PaintingStyle.stroke,
-      );
-    }
-
-    // ─── Torn cape (5 strips) ───
-    if (!flash) {
-      for (int strip = 0; strip < 5; strip++) {
-        final sf = strip / 4.0;
-        final cw = sin(_time * 2.2 + strip * 0.45) * s * (0.08 + sf * 0.06);
-        final ca = (0.88 - sf * 0.36).clamp(0.0, 1.0);
-        final capePath = Path()
-          ..moveTo(-s * 0.28, -s * 0.12)
-          ..cubicTo(
-            -s * 0.34 + sf * s * 0.1,
-            s * 0.28 + cw,
-            -s * 0.22 + sf * s * 0.14,
-            s * 0.56 + cw * 1.3,
-            -s * 0.12 + sf * s * 0.2,
-            s * 0.78 + cw,
-          )
-          ..lineTo(-s * 0.06 + sf * s * 0.26, s * 0.78 + cw)
-          ..cubicTo(
-            -s * 0.18 + sf * s * 0.2,
-            s * 0.5 + cw * 1.1,
-            -s * 0.28 + sf * s * 0.14,
-            s * 0.26 + cw,
-            -s * 0.23,
-            -s * 0.1,
-          )
-          ..close();
-        canvas.drawPath(capePath, Paint()..color = const Color(0xFF180828).withValues(alpha: ca));
-      }
-    }
-
-    final armorColor = flash ? Colors.white : color;
-
-    // ─── Legs ───
-    for (int leg = -1; leg <= 1; leg += 2) {
-      final legX = leg * s * 0.15;
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromCenter(center: Offset(legX, s * 0.44), width: s * 0.22, height: s * 0.52),
-          Radius.circular(s * 0.025),
-        ),
-        Paint()..color = armorColor,
-      );
-      // Leg groove
-      if (!flash && !small) {
-        canvas.drawLine(
-          Offset(legX, s * 0.18),
-          Offset(legX, s * 0.7),
-          Paint()
-            ..color = const Color(0xFF1A1A2A).withValues(alpha: 0.7)
-            ..strokeWidth = 1.0,
-        );
-      }
-      // Knee cap
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(legX, s * 0.23), width: s * 0.24, height: s * 0.14),
-        Paint()..color = const Color(0xFF5A5A7A),
-      );
-    }
-
-    // ─── Torso / chest plate ───
-    final torsoRect = Rect.fromCenter(center: Offset(0, s * 0.04), width: s * 0.66, height: s * 0.48);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(torsoRect, Radius.circular(s * 0.04)),
-      Paint()..color = armorColor,
-    );
-    // Battle damage scratches on torso
-    if (!flash && !small) {
-      final scratchPaint = Paint()
-        ..color = const Color(0xFF1A1A2A).withValues(alpha: 0.8)
-        ..strokeWidth = 0.9
-        ..style = PaintingStyle.stroke;
-      canvas.drawLine(Offset(-s * 0.18, -s * 0.12), Offset(-s * 0.08, s * 0.08), scratchPaint);
-      canvas.drawLine(Offset(-s * 0.14, -s * 0.08), Offset(-s * 0.06, s * 0.06), scratchPaint);
-      // Red glow from damage cracks
-      canvas.drawLine(
-        Offset(-s * 0.18, -s * 0.12),
-        Offset(-s * 0.08, s * 0.08),
-        Paint()
-          ..color = const Color(0xFFFF2200).withValues(alpha: 0.3)
-          ..strokeWidth = 1.5
-          ..style = PaintingStyle.stroke
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-      );
-    }
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(torsoRect, Radius.circular(s * 0.04)),
-      Paint()
-        ..color = const Color(0xFF1A1A2A)
-        ..strokeWidth = 1.5
-        ..style = PaintingStyle.stroke,
-    );
-
-    // ─── Chest rune (larger, more elaborate) ───
-    if (!flash) {
-      final rg = 0.55 + 0.35 * sin(_time * 2.2);
-      canvas.drawCircle(
-        Offset(0, s * 0.03),
-        s * 0.14,
-        Paint()
-          ..color = const Color(0xFFFF5500).withValues(alpha: rg * 0.65)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-      );
-      final rl = Paint()
-        ..color = const Color(0xFFFF7700).withValues(alpha: rg * 0.9)
-        ..strokeWidth = small ? 0.8 : 1.4
-        ..style = PaintingStyle.stroke;
-      // Rune pattern (hexagram-like)
-      for (int r = 0; r < 3; r++) {
-        final ra = r * pi / 3;
-        canvas.drawLine(
-          Offset(cos(ra) * s * 0.11, sin(ra) * s * 0.11 + s * 0.03),
-          Offset(cos(ra + pi) * s * 0.11, sin(ra + pi) * s * 0.11 + s * 0.03),
-          rl,
-        );
-      }
-    }
-
-    // ─── Shoulder pauldrons with spikes ───
-    for (int side = -1; side <= 1; side += 2) {
-      final px = side * s * 0.4;
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(px, -s * 0.14), width: s * 0.32, height: s * 0.24),
-        Paint()..color = const Color(0xFF555577),
-      );
-      // Main spike
-      canvas.drawPath(
-        Path()
-          ..moveTo(px, -s * 0.24)
-          ..lineTo(px - side * s * 0.06, -s * 0.48)
-          ..lineTo(px + side * s * 0.06, -s * 0.24)
-          ..close(),
-        Paint()..color = const Color(0xFF443366),
-      );
-      // Second smaller spike
-      if (!small) {
-        canvas.drawPath(
-          Path()
-            ..moveTo(px + side * s * 0.08, -s * 0.18)
-            ..lineTo(px + side * s * 0.15, -s * 0.34)
-            ..lineTo(px + side * s * 0.2, -s * 0.18)
-            ..close(),
-          Paint()..color = const Color(0xFF3A2855),
-        );
-      }
-    }
-
-    // ─── Helmet ───
-    final helmetPath = Path()
-      ..moveTo(-s * 0.29, -s * 0.28)
-      ..lineTo(-s * 0.29, -s * 0.62)
-      ..cubicTo(-s * 0.29, -s * 0.86, s * 0.29, -s * 0.86, s * 0.29, -s * 0.62)
-      ..lineTo(s * 0.29, -s * 0.28)
-      ..close();
-    canvas.drawPath(helmetPath, Paint()..color = flash ? Colors.white : const Color(0xFF4A4A6A));
-    canvas.drawPath(
-      helmetPath,
-      Paint()
-        ..color = const Color(0xFF1A1A2A)
-        ..strokeWidth = 1.5
-        ..style = PaintingStyle.stroke,
-    );
-
-    if (!flash) {
-      // ─── Demonic horns (curved, more imposing) ───
-      for (int side = -1; side <= 1; side += 2) {
-        // Main horn
-        canvas.drawPath(
-          Path()
-            ..moveTo(side * s * 0.26, -s * 0.66)
-            ..cubicTo(
-              side * s * 0.55,
-              -s * 0.96,
-              side * s * 0.46,
-              -s * 1.18,
-              side * s * 0.24,
-              -s * 0.9,
-            )
-            ..lineTo(side * s * 0.26, -s * 0.66)
-            ..close(),
-          Paint()..color = const Color(0xFF221133),
-        );
-        // Horn ridge
-        if (!small) {
-          canvas.drawLine(
-            Offset(side * s * 0.26, -s * 0.66),
-            Offset(side * s * 0.36, -s * 1.0),
-            Paint()
-              ..color = const Color(0xFF4A3060).withValues(alpha: 0.7)
-              ..strokeWidth = 1.0,
-          );
-        }
-      }
-
-      // ─── Visor slit eyes ───
-      final vg = 0.72 + 0.28 * sin(_time * 3.2);
-      for (int e = -1; e <= 1; e += 2) {
-        canvas.drawOval(
+      // "BREACH IMMINENT" warning bands
+      for (int i = 0; i < 2; i++) {
+        canvas.drawRect(
           Rect.fromCenter(
-            center: Offset(e * s * 0.1, -s * 0.5),
-            width: s * 0.14,
-            height: s * 0.06,
+            center: Offset(0, s * 0.8 + i * s * 0.15),
+            width: s * 1.5,
+            height: s * 0.05,
           ),
           Paint()
-            ..color = const Color(0xFFFF2200).withValues(alpha: vg)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, small ? 2 : 3.5),
-        );
-        canvas.drawOval(
-          Rect.fromCenter(center: Offset(e * s * 0.1, -s * 0.5), width: s * 0.09, height: s * 0.032),
-          Paint()..color = const Color(0xFFFFEE00).withValues(alpha: 0.88),
-        );
-      }
-
-      // ─── Dark fire/smoke from back of helmet ───
-      if (!small) {
-        for (int hf = 0; hf < 3; hf++) {
-          final hfw = sin(_time * 3.5 + hf * 1.1) * s * 0.06;
-          canvas.drawCircle(
-            Offset((-1 + hf) * s * 0.15 + hfw, -s * (0.86 + hf * 0.14)),
-            s * (0.1 - hf * 0.02),
-            Paint()
-              ..color = const Color(0xFF440066).withValues(alpha: 0.4 - hf * 0.1)
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-          );
-        }
-      }
-
-      // Armor center vertical ridge on helmet
-      canvas.drawLine(
-        Offset(0, -s * 0.28),
-        Offset(0, -s * 0.72),
-        Paint()
-          ..color = const Color(0xFF6A6A8A)
-          ..strokeWidth = small ? 0.8 : 1.5,
-      );
-    }
-  }
-
-  // ══════════════════════════════════════════════════════════════════════
-  // THE LICH (BOSS) — colossal undead sorcerer with scythe and skulls
-  // ══════════════════════════════════════════════════════════════════════
-  void _renderTheLich(Canvas canvas, double s, Color color, bool flash) {
-    final outerPulse = 0.7 + 0.3 * sin(_time * 1.4);
-    final small = s < 20.0;
-
-    // ─── Massive outer void halo ───
-    canvas.drawCircle(
-      Offset.zero,
-      s * 2.1,
-      Paint()
-        ..color = Palette.fireDeep.withValues(alpha: 0.08 * outerPulse)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 1.5),
-    );
-    canvas.drawCircle(
-      Offset.zero,
-      s * 1.3,
-      Paint()
-        ..color = const Color(0xFF110022).withValues(alpha: 0.15)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.5),
-    );
-
-    // ─── Dark fire pool on ground ───
-    if (!flash && !small) {
-      for (int gf = 0; gf < 5; gf++) {
-        final gfw = sin(_time * 2.0 + gf * 0.8) * s * 0.18;
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset(gfw, s * (1.8 + gf * 0.12)),
-            width: s * (1.8 - gf * 0.22),
-            height: s * 0.14,
-          ),
-          Paint()
-            ..color = const Color(0xFF440066).withValues(alpha: (0.22 - gf * 0.04).clamp(0, 1))
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.18),
-        );
-      }
-    }
-
-    if (!flash) {
-      // ─── Billowing cloak (5 layers) ───
-      for (int layer = 0; layer < 5; layer++) {
-        final lf = layer / 4.0;
-        final cw = sin(_time * 1.8 + layer * 0.7) * s * (0.1 + lf * 0.08);
-        final ca = (0.88 - lf * 0.3).clamp(0.0, 1.0);
-        final cloakPath = Path()
-          ..moveTo(-s * (0.38 - lf * 0.08), s * 0.22)
-          ..cubicTo(
-            -s * (0.56 + lf * 0.15),
-            s * 0.65 + cw,
-            -s * (0.4 + lf * 0.2),
-            s * 1.38 + cw * 1.4,
-            -s * (0.1 + lf * 0.18),
-            s * 1.9 + cw,
-          )
-          ..lineTo(s * (0.1 + lf * 0.18), s * 1.9 + cw)
-          ..cubicTo(
-            s * (0.4 + lf * 0.2),
-            s * 1.38 + cw * 1.4,
-            s * (0.56 + lf * 0.15),
-            s * 0.65 + cw,
-            s * (0.38 - lf * 0.08),
-            s * 0.22,
-          )
-          ..close();
-        canvas.drawPath(
-          cloakPath,
-          Paint()
-            ..shader = LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                const Color(0xFF1A0A2A).withValues(alpha: ca),
-                const Color(0xFF0A0010).withValues(alpha: ca * 0.5),
-              ],
-            ).createShader(
-              Rect.fromCenter(center: Offset(0, s), width: s * 2.5, height: s * 2.2),
+            ..color = Palette.alertRed.withValues(
+              alpha: 0.6 * (1 - (_time * 3 % 1.0)),
             ),
         );
-        // Cloak rune pattern (first two layers)
-        if (!small && layer < 2) {
-          final rp = 0.3 + 0.2 * sin(_time * 1.5 + layer * pi);
-          for (int ri = 0; ri < 3; ri++) {
-            canvas.drawCircle(
-              Offset((-1 + ri) * s * 0.2, s * (0.8 + layer * 0.5 + ri * 0.2)),
-              s * 0.045,
+      }
+    }
+
+    // Main body - angular mech chassis
+    final bodyPath = Path()
+      ..moveTo(0, -s * 0.6) // Top point
+      ..lineTo(s * 0.4, -s * 0.3) // Top right
+      ..lineTo(s * 0.45, s * 0.35) // Bottom right
+      ..lineTo(s * 0.2, s * 0.55) // Lower right
+      ..lineTo(-s * 0.2, s * 0.55) // Lower left
+      ..lineTo(-s * 0.45, s * 0.35) // Bottom left
+      ..lineTo(-s * 0.4, -s * 0.3) // Top left
+      ..close();
+
+    // Body shadow
+    canvas.save();
+    canvas.translate(s * 0.03, s * 0.05);
+    canvas.drawPath(
+      bodyPath,
+      Paint()
+        ..color = const Color(0xFF000000).withValues(alpha: 0.4)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.restore();
+
+    // Body fill
+    canvas.drawPath(
+      bodyPath,
+      Paint()..color = flash ? Palette.dataWhite : const Color(0xFF1A1A28),
+    );
+
+    // Body edge
+    canvas.drawPath(
+      bodyPath,
+      Paint()
+        ..color = (flash ? Palette.dataWhite : Palette.alertAmber).withValues(
+          alpha: 0.6,
+        )
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0,
+    );
+
+    // Energy shield (hexagonal, in front when charging)
+    if (!flash) {
+      final shieldGlow = isKnightCharging ? 0.8 : 0.3;
+      final shieldPath = Path();
+      for (int i = 0; i < 6; i++) {
+        final angle = i * pi / 3 - pi / 2;
+        final x = cos(angle) * s * 0.55;
+        final y = sin(angle) * s * 0.45;
+        if (i == 0) {
+          shieldPath.moveTo(x, y - s * 0.1);
+        } else {
+          shieldPath.lineTo(x, y - s * 0.1);
+        }
+      }
+      shieldPath.close();
+
+      // Shield glow
+      canvas.drawPath(
+        shieldPath,
+        Paint()
+          ..color = Palette.neonCyan.withValues(alpha: shieldGlow * 0.3)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.15),
+      );
+
+      // Shield surface
+      canvas.drawPath(
+        shieldPath,
+        Paint()..color = Palette.neonCyan.withValues(alpha: shieldGlow * 0.15),
+      );
+
+      // Shield edge
+      canvas.drawPath(
+        shieldPath,
+        Paint()
+          ..color = Palette.neonCyan.withValues(alpha: shieldGlow)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5,
+      );
+
+      // Hex pattern on shield
+      if (!small) {
+        for (int hx = -1; hx <= 1; hx++) {
+          for (int hy = -1; hy <= 0; hy++) {
+            final hcx = hx * s * 0.22 + (hy % 2) * s * 0.11;
+            final hcy = hy * s * 0.2 - s * 0.1;
+            final hexPath = Path();
+            for (int i = 0; i < 6; i++) {
+              final angle = i * pi / 3;
+              final x = hcx + cos(angle) * s * 0.08;
+              final y = hcy + sin(angle) * s * 0.08;
+              if (i == 0)
+                hexPath.moveTo(x, y);
+              else
+                hexPath.lineTo(x, y);
+            }
+            hexPath.close();
+            canvas.drawPath(
+              hexPath,
               Paint()
-                ..color = const Color(0xFFAA44FF).withValues(alpha: rp)
-                ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+                ..color = Palette.neonCyan.withValues(alpha: shieldGlow * 0.4)
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 1.0,
             );
           }
         }
       }
+    }
 
-      // ─── Soul wisps escaping from cloak hem ───
-      if (!small) {
-        for (int w = 0; w < 4; w++) {
-          final wt = (_time * 1.6 + w * 0.9) % 2.8;
-          final wA = (wt < 1.0 ? wt : (2.8 - wt) / 1.8).clamp(0.0, 1.0);
-          final wX = (-1.5 + w) * s * 0.4 + sin(_time * 2.0 + w) * s * 0.15;
-          canvas.drawCircle(
-            Offset(wX, s * (1.85 - wt * 0.8)),
-            s * (0.07 + wt * 0.03),
-            Paint()
-              ..color = const Color(0xFF88CCFF).withValues(alpha: wA * 0.55)
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-          );
-        }
-      }
+    // Visor (red glowing slit)
+    final visorPulse = 0.7 + 0.3 * sin(_time * 4);
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(0, -s * 0.35),
+        width: s * 0.5,
+        height: s * 0.08,
+      ),
+      Paint()
+        ..color = Palette.alertRed.withValues(alpha: 0.4 * visorPulse)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(0, -s * 0.35),
+        width: s * 0.45,
+        height: s * 0.05,
+      ),
+      Paint()..color = flash ? Palette.dataWhite : Palette.alertRed,
+    );
 
-      // ─── Spectral scythe (right side) ───
-      final sScythe = s * 0.95;
-      final scytheBase = Offset(s * 0.62, -s * 0.2);
-      // Scythe staff
-      canvas.drawLine(
-        scytheBase,
-        Offset(s * 0.68, s * 1.6),
-        Paint()
-          ..color = const Color(0xFF2A1A3A)
-          ..strokeWidth = s * 0.06
-          ..strokeCap = StrokeCap.round,
-      );
-      // Scythe blade
-      final bladePath = Path()
-        ..moveTo(s * 0.64, -s * 0.24)
-        ..cubicTo(
-          s * 1.45,
-          -s * 0.85,
-          s * 1.6,
-          -s * 0.38,
-          s * 0.96,
-          -s * 0.06,
-        );
-      canvas.drawPath(
-        bladePath,
-        Paint()
-          ..color = const Color(0xFF220033).withValues(alpha: 0.5)
-          ..strokeWidth = sScythe * 0.22
-          ..strokeCap = StrokeCap.round
-          ..style = PaintingStyle.stroke
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, small ? 4 : 8),
-      );
-      canvas.drawPath(
-        bladePath,
-        Paint()
-          ..color = const Color(0xFF6633AA)
-          ..strokeWidth = sScythe * 0.07
-          ..strokeCap = StrokeCap.round
-          ..style = PaintingStyle.stroke,
-      );
-      // Blade glowing edge
-      canvas.drawPath(
-        bladePath,
-        Paint()
-          ..color = const Color(0xFFCC88FF).withValues(alpha: 0.7 + 0.2 * sin(_time * 2.5))
-          ..strokeWidth = sScythe * 0.02
-          ..style = PaintingStyle.stroke,
-      );
-
-      // ─── 3 Orbiting fire orbs ───
-      for (int orb = 0; orb < 3; orb++) {
-        final orbAng = _time * 1.3 + orb * pi * 2 / 3;
-        final orbX = cos(orbAng) * s * 1.0;
-        final orbY = sin(orbAng) * s * 0.55;
+    // Shoulder warning lights
+    if (!small) {
+      final lightOn = ((_time * 3).floor() % 2) == 0;
+      for (final side in [-1.0, 1.0]) {
         canvas.drawCircle(
-          Offset(orbX, orbY),
-          s * 0.22,
+          Offset(side * s * 0.35, -s * 0.2),
+          s * 0.05,
           Paint()
-            ..color = Palette.fireDeep.withValues(alpha: 0.5)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.16),
-        );
-        canvas.drawCircle(Offset(orbX, orbY), s * 0.13, Paint()..color = Palette.fireGold);
-        canvas.drawCircle(Offset(orbX, orbY), s * 0.07, Paint()..color = Palette.fireWhite);
-        // Orb trail
-        for (int tr = 1; tr <= 6; tr++) {
-          final trAng = orbAng - tr * 0.14;
-          final trA = (0.42 - tr * 0.06).clamp(0.0, 1.0);
-          canvas.drawCircle(
-            Offset(cos(trAng) * s * 1.0, sin(trAng) * s * 0.55),
-            s * (0.07 - tr * 0.008).clamp(0.01, 0.1),
-            Paint()
-              ..color = Palette.fireMid.withValues(alpha: trA)
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
-          );
-        }
-      }
-
-      // ─── Orbiting skulls (3 smaller, faster) ───
-      if (!small) {
-        for (int sk = 0; sk < 3; sk++) {
-          final skAng = _time * 0.9 + sk * pi * 2 / 3 + pi / 3;
-          final skX = cos(skAng) * s * 1.35;
-          final skY = sin(skAng) * s * 0.65;
-          canvas.drawCircle(
-            Offset(skX, skY),
-            s * 0.18,
-            Paint()..color = const Color(0xFFD8D0A8),
-          );
-          canvas.drawOval(
-            Rect.fromCenter(center: Offset(skX - s * 0.06, skY - s * 0.04), width: s * 0.08, height: s * 0.1),
-            Paint()..color = const Color(0xFF111111),
-          );
-          canvas.drawOval(
-            Rect.fromCenter(center: Offset(skX + s * 0.06, skY - s * 0.04), width: s * 0.08, height: s * 0.1),
-            Paint()..color = const Color(0xFF111111),
-          );
-          canvas.drawCircle(
-            Offset(skX, skY),
-            s * 0.19,
-            Paint()
-              ..color = const Color(0xFF664400).withValues(alpha: 0.3)
-              ..strokeWidth = 1.0
-              ..style = PaintingStyle.stroke,
-          );
-        }
-      }
-
-      // ─── Energy rings ───
-      for (int ring = 0; ring < 3; ring++) {
-        final ringR = s * (0.62 + ring * 0.16);
-        final rp = 0.5 + 0.5 * sin(_time * (2.2 + ring * 0.5) + ring);
-        canvas.drawCircle(
-          Offset.zero,
-          ringR,
-          Paint()
-            ..color = Palette.fireDeep.withValues(alpha: 0.07 * rp)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.2)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = s * 0.045,
+            ..color = (isKnightCharging ? Palette.alertRed : Palette.alertAmber)
+                .withValues(alpha: lightOn ? 0.9 : 0.3),
         );
       }
     }
 
-    // ─── Skull shadow ───
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(0, s * 0.22), width: s * 1.4, height: s * 0.28),
-      Paint()
-        ..color = const Color(0x55000000)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
-    );
-
-    // ─── Skull cranium ───
-    final boneColor = flash ? Colors.white : const Color(0xFFE0DBB8);
-    final skullPath = Path()
-      ..moveTo(-s * 0.6, s * 0.2)
-      ..cubicTo(-s * 0.66, -s * 0.08, -s * 0.62, -s * 0.74, 0, -s * 0.8)
-      ..cubicTo(s * 0.62, -s * 0.74, s * 0.66, -s * 0.08, s * 0.6, s * 0.2)
-      ..close();
-    canvas.drawPath(skullPath, Paint()..color = boneColor);
-
-    // Cranium bone highlight (top)
-    if (!flash && !small) {
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(s * 0.1, -s * 0.38), width: s * 0.55, height: s * 0.48),
-        Paint()
-          ..color = Colors.white.withValues(alpha: 0.16)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
-      );
-    }
-
-    // ─── Skull cracks ───
-    if (!flash) {
-      final cglow = 0.65 + 0.3 * sin(_time * 2.5);
-      final crackG = Paint()
-        ..color = Palette.fireDeep.withValues(alpha: cglow * 0.9)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, small ? 3 : 5.5)
-        ..strokeWidth = small ? 2.5 : 4.0
-        ..style = PaintingStyle.stroke;
-      final crackD = Paint()
-        ..color = const Color(0xFF220000)
-        ..strokeWidth = small ? 1.2 : 2.0
-        ..style = PaintingStyle.stroke;
-      final cr1 = Path()
-        ..moveTo(0, -s * 0.76)
-        ..lineTo(-s * 0.12, -s * 0.52)
-        ..lineTo(s * 0.08, -s * 0.3)
-        ..lineTo(-s * 0.05, -s * 0.1);
-      final cr2 = Path()
-        ..moveTo(s * 0.28, -s * 0.6)
-        ..lineTo(s * 0.18, -s * 0.38)
-        ..lineTo(s * 0.24, -s * 0.2);
-      final cr3 = Path()
-        ..moveTo(-s * 0.3, -s * 0.52)
-        ..lineTo(-s * 0.18, -s * 0.28);
-      canvas.drawPath(cr1, crackG);
-      canvas.drawPath(cr2, crackG..strokeWidth = small ? 2.0 : 3.0);
-      canvas.drawPath(cr3, crackG..strokeWidth = small ? 1.8 : 2.5);
-      canvas.drawPath(cr1, crackD);
-      canvas.drawPath(cr2, crackD);
-      canvas.drawPath(cr3, crackD);
-
-      // Fire seeping from cracks
-      if (!small) {
-        for (int ec = 0; ec < 5; ec++) {
-          final ect = (_time * 2.0 + ec * 0.55) % 2.2;
-          final ecA = (ect < 1.0 ? ect : (2.2 - ect) / 1.2).clamp(0.0, 1.0);
-          canvas.drawCircle(
-            Offset(s * (-0.04 + ec * 0.04), s * (-0.76 + ect * 0.36)),
-            s * 0.028,
-            Paint()
-              ..color = Palette.fireMid.withValues(alpha: ecA * 0.9)
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
-          );
-        }
-      }
-    }
-
-    // Skull glow outline
-    canvas.drawPath(
-      skullPath,
-      Paint()
-        ..color = Palette.fireGold.withValues(alpha: 0.22 + 0.16 * sin(_time * 2.0))
-        ..strokeWidth = small ? 1.8 : 3.0
-        ..style = PaintingStyle.stroke
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5),
-    );
-    canvas.drawPath(
-      skullPath,
-      Paint()
-        ..color = const Color(0xFF332211)
-        ..strokeWidth = small ? 1.0 : 1.8
-        ..style = PaintingStyle.stroke,
-    );
-
-    // ─── Eye sockets ───
-    final eyeL = Offset(-s * 0.24, -s * 0.27);
-    final eyeR = Offset(s * 0.24, -s * 0.27);
-    for (final eye in [eyeL, eyeR]) {
-      canvas.drawOval(
-        Rect.fromCenter(center: eye, width: s * 0.32, height: s * 0.38),
-        Paint()..color = const Color(0xFF080808),
-      );
-    }
-
-    // ─── Eye flames (multi-layer eruptions) ───
-    if (!flash) {
-      final int eyeLayers = small ? 2 : 3;
-      // Left: hellfire orange
-      for (int l = 0; l < eyeLayers; l++) {
-        final lf = l / (eyeLayers - 1.0);
-        canvas.drawOval(
+    // Leg struts
+    if (!small && !flash) {
+      for (final side in [-1.0, 1.0]) {
+        canvas.drawLine(
+          Offset(side * s * 0.25, s * 0.5),
+          Offset(side * s * 0.3, s * 0.75),
+          Paint()
+            ..color = const Color(0xFF2A2A3A)
+            ..strokeWidth = s * 0.08
+            ..strokeCap = StrokeCap.round,
+        );
+        // Foot pad
+        canvas.drawRect(
           Rect.fromCenter(
-            center: eyeL.translate(sin(_time * 4.5 + l) * s * 0.04, -s * 0.06 * l),
-            width: s * 0.32 * (1 - lf * 0.38),
-            height: s * (0.38 + l * 0.22) * (1 - lf * 0.35),
+            center: Offset(side * s * 0.3, s * 0.78),
+            width: s * 0.15,
+            height: s * 0.05,
           ),
-          Paint()
-            ..color = [Palette.fireDeep, Palette.fireMid, Palette.fireGold][l]
-                .withValues(alpha: 0.55 + 0.3 * sin(_time * 4.2 + l))
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, (4.5 - l * 1.2).clamp(1.0, 5.0)),
-        );
-      }
-      // Right: spectral purple
-      for (int l = 0; l < eyeLayers; l++) {
-        final lf = l / (eyeLayers - 1.0);
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: eyeR.translate(sin(_time * 3.8 + l) * s * 0.04, -s * 0.06 * l),
-            width: s * 0.32 * (1 - lf * 0.38),
-            height: s * (0.38 + l * 0.22) * (1 - lf * 0.35),
-          ),
-          Paint()
-            ..color = [
-              const Color(0xFF7700AA),
-              const Color(0xFF9922CC),
-              const Color(0xFFCCAAFF),
-            ][l].withValues(alpha: 0.55 + 0.3 * sin(_time * 3.5 + l + 1.1))
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, (4.5 - l * 1.2).clamp(1.0, 5.0)),
+          Paint()..color = const Color(0xFF1A1A28),
         );
       }
     }
 
-    // ─── Nasal cavity ───
-    final nosePath = Path()
-      ..moveTo(0, -s * 0.12)
-      ..lineTo(-s * 0.11, s * 0.07)
-      ..lineTo(s * 0.11, s * 0.07)
-      ..close();
-    canvas.drawPath(nosePath, Paint()..color = const Color(0xFF080808));
-
-    // ─── Floating jaw ───
-    final jawDrop = s * 0.1 + sin(_time * 1.8) * s * 0.1;
-    final jawY = s * 0.22 + jawDrop;
-    final jawPath = Path()
-      ..moveTo(-s * 0.54, jawY)
-      ..lineTo(-s * 0.54, jawY + s * 0.3)
-      ..cubicTo(-s * 0.32, jawY + s * 0.42, s * 0.32, jawY + s * 0.42, s * 0.54, jawY + s * 0.3)
-      ..lineTo(s * 0.54, jawY)
-      ..close();
-    canvas.drawPath(jawPath, Paint()..color = boneColor);
-    canvas.drawPath(
-      jawPath,
-      Paint()
-        ..color = const Color(0xFF332211)
-        ..strokeWidth = small ? 1.0 : 1.8
-        ..style = PaintingStyle.stroke,
-    );
-
-    // ─── Boss teeth ───
-    if (!flash) {
-      final teethB = Paint()..color = const Color(0xFFEEEAD2);
-      final tglow = Paint()
-        ..color = Palette.fireGold.withValues(alpha: 0.22)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-      for (int t = -4; t <= 4; t++) {
-        final tx = t * s * 0.1;
-        final th = s * (t.abs() % 2 == 0 ? 0.26 : 0.18);
-        final tp = Path()
-          ..moveTo(tx - s * 0.042, jawY)
-          ..lineTo(tx, jawY - th)
-          ..lineTo(tx + s * 0.042, jawY)
-          ..close();
-        canvas.drawPath(tp, teethB);
-        canvas.drawPath(tp, tglow);
-      }
-    }
-
-    // ─── Crown (5 spikes + gems) ───
-    if (!flash) {
-      // Base band with gradient
-      canvas.drawRect(
-        Rect.fromCenter(center: Offset(0, -s * 0.76), width: s * 1.18, height: s * 0.18),
-        Paint()
-          ..shader = LinearGradient(
-            colors: [Palette.fireGold, const Color(0xFFAA8800), Palette.fireGold],
-            stops: const [0.0, 0.5, 1.0],
-          ).createShader(Rect.fromLTWH(-s * 0.59, -s * 0.76, s * 1.18, s * 0.18)),
+    // Status text indicator
+    if (isKnightCharging && !small) {
+      _drawCenteredText(
+        canvas,
+        'BREACH',
+        Offset(0, -s * 0.8),
+        Palette.alertRed.withValues(alpha: 0.8 * (0.5 + 0.5 * sin(_time * 8))),
       );
-      // Crown engraving line
-      canvas.drawLine(
-        Offset(-s * 0.59, -s * 0.74),
-        Offset(s * 0.59, -s * 0.74),
-        Paint()
-          ..color = const Color(0xFF664400).withValues(alpha: 0.6)
-          ..strokeWidth = 0.8,
-      );
-      // 5 spikes
-      for (int sp = 0; sp < 5; sp++) {
-        final sx = (-2 + sp) * s * 0.23;
-        final isCenterSpike = sp == 2;
-        final sph = isCenterSpike ? s * 0.52 : s * 0.34;
-        final spPath = Path()
-          ..moveTo(sx - s * 0.1, -s * 0.76)
-          ..lineTo(sx, -s * 0.76 - sph)
-          ..lineTo(sx + s * 0.1, -s * 0.76)
-          ..close();
-        canvas.drawPath(
-          spPath,
-          Paint()
-            ..color = Palette.fireGold.withValues(alpha: 0.4)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-        );
-        canvas.drawPath(spPath, Paint()..color = Palette.fireGold);
-        canvas.drawPath(
-          spPath,
-          Paint()
-            ..color = const Color(0xFF664400)
-            ..strokeWidth = 1.5
-            ..style = PaintingStyle.stroke,
-        );
-        // Gem at spike tip
-        final gemColor = const [
-          Color(0xFFFF2200),
-          Color(0xFF0088FF),
-          Color(0xFFFFFF00),
-          Color(0xFF00FF44),
-          Color(0xFFAA00FF),
-        ][sp];
-        final gg = 0.65 + 0.35 * sin(_time * (3.0 + sp) + sp);
-        canvas.drawCircle(
-          Offset(sx, -s * 0.76 - sph + s * 0.07),
-          s * 0.07,
-          Paint()
-            ..color = gemColor.withValues(alpha: gg)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
-        );
-        canvas.drawCircle(Offset(sx, -s * 0.76 - sph + s * 0.07), s * 0.045, Paint()..color = gemColor);
-      }
-
-      // ─── Shoulder mini-skulls ───
-      for (int side = -1; side <= 1; side += 2) {
-        final msx = side * s * 0.82;
-        final msy = -s * 0.1;
-        canvas.drawCircle(Offset(msx, msy), s * 0.21, Paint()..color = const Color(0xFFD0CCA8));
-        for (final ex in [-s * 0.07, s * 0.07]) {
-          canvas.drawOval(
-            Rect.fromCenter(
-              center: Offset(msx + ex * side, msy - s * 0.02),
-              width: s * 0.09,
-              height: s * 0.11,
-            ),
-            Paint()..color = const Color(0xFF111111),
-          );
-        }
-        final mg = 0.45 + 0.28 * sin(_time * 3.2 + side);
-        canvas.drawCircle(
-          Offset(msx - side * s * 0.07, msy - s * 0.02),
-          s * 0.045,
-          Paint()
-            ..color = Palette.fireGold.withValues(alpha: mg)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-        );
-      }
     }
   }
 
+  void _drawCenteredText(
+    Canvas canvas,
+    String text,
+    Offset center,
+    Color color,
+  ) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: 8.0,
+          fontFamily: 'monospace',
+          fontWeight: FontWeight.bold,
+          letterSpacing: 2.0,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      center - Offset(textPainter.width / 2, textPainter.height / 2),
+    );
+  }
+
   // ══════════════════════════════════════════════════════════════════════
-  // HP BAR
+  // OVERSEER (BOSS) — Massive surveillance command unit
+  // (Replaces The Lich - multi-phase boss with laser and summons)
+  // ══════════════════════════════════════════════════════════════════════
+  void _renderTheLich(Canvas canvas, double s, Color color, bool flash) {
+    final outerPulse = 0.7 + 0.3 * sin(_time * 1.4);
+    final small = s < 20.0;
+    final hpPercent = hp / data.maxHp;
+    final isPhase2 = hpPercent <= 0.5;
+
+    // Massive outer void halo
+    canvas.drawCircle(
+      Offset.zero,
+      s * 2.0,
+      Paint()
+        ..color = (isPhase2 ? Palette.alertRed : Palette.neonCyan).withValues(
+          alpha: 0.1 * outerPulse,
+        )
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 1.5),
+    );
+
+    // Rotating surveillance ring
+    final ringAngle = _time * 0.5;
+    if (!flash) {
+      canvas.save();
+      canvas.rotate(ringAngle);
+      for (int i = 0; i < 12; i++) {
+        final segAngle = i * pi / 6;
+        final segColor = (i % 3 == 0) ? Palette.alertAmber : Palette.neonCyan;
+        canvas.drawArc(
+          Rect.fromCircle(center: Offset.zero, radius: s * 1.2),
+          segAngle,
+          pi / 8,
+          false,
+          Paint()
+            ..color = segColor.withValues(alpha: 0.4 * outerPulse)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = s * 0.04,
+        );
+      }
+      canvas.restore();
+    }
+
+    // Main head structure - large angular shape
+    final headPath = Path()
+      ..moveTo(0, -s * 0.7)
+      ..lineTo(s * 0.6, -s * 0.3)
+      ..lineTo(s * 0.7, s * 0.2)
+      ..lineTo(s * 0.5, s * 0.6)
+      ..lineTo(-s * 0.5, s * 0.6)
+      ..lineTo(-s * 0.7, s * 0.2)
+      ..lineTo(-s * 0.6, -s * 0.3)
+      ..close();
+
+    // Head shadow
+    canvas.save();
+    canvas.translate(s * 0.04, s * 0.06);
+    canvas.drawPath(
+      headPath,
+      Paint()
+        ..color = const Color(0xFF000000).withValues(alpha: 0.5)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.1),
+    );
+    canvas.restore();
+
+    // Head fill
+    canvas.drawPath(
+      headPath,
+      Paint()..color = flash ? Palette.dataWhite : const Color(0xFF1A1A28),
+    );
+
+    // Tech panel lines on head
+    if (!flash && !small) {
+      final panelPaint = Paint()
+        ..color = Palette.neonCyan.withValues(alpha: 0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+      canvas.drawLine(
+        Offset(-s * 0.5, -s * 0.1),
+        Offset(s * 0.5, -s * 0.1),
+        panelPaint,
+      );
+      canvas.drawLine(
+        Offset(-s * 0.4, s * 0.2),
+        Offset(s * 0.4, s * 0.2),
+        panelPaint,
+      );
+      canvas.drawLine(Offset(0, -s * 0.65), Offset(0, s * 0.55), panelPaint);
+    }
+
+    // Head edge glow
+    final edgeColor = isPhase2 ? Palette.alertRed : Palette.neonCyan;
+    canvas.drawPath(
+      headPath,
+      Paint()
+        ..color = (flash ? Palette.dataWhite : edgeColor).withValues(alpha: 0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+
+    // === MAIN SURVEILLANCE EYE ===
+    final mainEyeRadius = s * 0.35;
+    final eyeColor = isPhase2 ? Palette.alertRed : Palette.neonMagenta;
+
+    // Eye glow
+    canvas.drawCircle(
+      Offset(0, -s * 0.15),
+      mainEyeRadius * 1.5,
+      Paint()
+        ..color = eyeColor.withValues(alpha: 0.3 * outerPulse)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, s * 0.2),
+    );
+
+    // Eye socket
+    canvas.drawCircle(
+      Offset(0, -s * 0.15),
+      mainEyeRadius,
+      Paint()..color = const Color(0xFF080810),
+    );
+
+    // Iris ring
+    canvas.drawCircle(
+      Offset(0, -s * 0.15),
+      mainEyeRadius * 0.85,
+      Paint()
+        ..color = eyeColor.withValues(alpha: 0.8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s * 0.05,
+    );
+
+    // Inner iris
+    canvas.drawCircle(
+      Offset(0, -s * 0.15),
+      mainEyeRadius * 0.6,
+      Paint()..color = eyeColor.withValues(alpha: 0.6),
+    );
+
+    // Pupil
+    canvas.drawCircle(
+      Offset(0, -s * 0.15),
+      mainEyeRadius * 0.35,
+      Paint()..color = const Color(0xFF000008),
+    );
+
+    // Pupil core glow
+    final pupilPulse = 0.5 + 0.5 * sin(_time * 4);
+    canvas.drawCircle(
+      Offset(0, -s * 0.15),
+      mainEyeRadius * 0.2,
+      Paint()
+        ..color = eyeColor.withValues(alpha: 0.8 * pupilPulse)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
+    canvas.drawCircle(
+      Offset(0, -s * 0.15),
+      mainEyeRadius * 0.1,
+      Paint()..color = Palette.dataWhite.withValues(alpha: 0.9),
+    );
+
+    // Specular
+    canvas.drawCircle(
+      Offset(-mainEyeRadius * 0.3, -s * 0.15 - mainEyeRadius * 0.3),
+      mainEyeRadius * 0.12,
+      Paint()..color = Palette.dataWhite.withValues(alpha: 0.6),
+    );
+
+    // === LASER CHARGING ===
+    if (isBossChargingLaser) {
+      final chargeRatio = (_bossLaserChargeTimer / 2.0).clamp(0.0, 1.0);
+
+      // Charging rings
+      for (int i = 0; i < 3; i++) {
+        final ringSize = mainEyeRadius * (1.5 + chargeRatio * i * 0.5);
+        canvas.drawCircle(
+          Offset(0, -s * 0.15),
+          ringSize,
+          Paint()
+            ..color = Palette.alertRed.withValues(
+              alpha: 0.4 * chargeRatio * (0.5 + 0.5 * sin(_time * 12 + i)),
+            )
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3.0,
+        );
+      }
+
+      // Charging beam
+      canvas.drawLine(
+        Offset(0, -s * 0.15),
+        Offset(0, s * 50),
+        Paint()
+          ..color = Palette.alertRed.withValues(alpha: 0.6 * chargeRatio)
+          ..strokeWidth = s * 0.1 * chargeRatio
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+      );
+
+      // "PURGE PROTOCOL" indicator
+      if (!small) {
+        final textPulse = 0.5 + 0.5 * sin(_time * 10);
+        _drawBossText(
+          canvas,
+          'PURGE',
+          Offset(0, -s * 0.9),
+          Palette.alertRed.withValues(alpha: 0.9 * textPulse),
+          s * 0.15,
+        );
+      }
+    }
+
+    // === SECONDARY EYES (on sides) ===
+    if (!small && !flash) {
+      for (final side in [-1.0, 1.0]) {
+        final sideEyeX = side * s * 0.45;
+        final sideEyeY = s * 0.25;
+        final sideEyeR = s * 0.12;
+
+        // Socket
+        canvas.drawCircle(
+          Offset(sideEyeX, sideEyeY),
+          sideEyeR,
+          Paint()..color = const Color(0xFF080810),
+        );
+        // Iris
+        canvas.drawCircle(
+          Offset(sideEyeX, sideEyeY),
+          sideEyeR * 0.7,
+          Paint()..color = eyeColor.withValues(alpha: 0.7),
+        );
+        // Pupil
+        canvas.drawCircle(
+          Offset(sideEyeX, sideEyeY),
+          sideEyeR * 0.35,
+          Paint()..color = const Color(0xFF000008),
+        );
+      }
+    }
+
+    // === DATA STREAMS from head ===
+    if (!flash && !small) {
+      for (int i = 0; i < 6; i++) {
+        final streamAngle = i * pi / 3 + _time * 0.3;
+        final streamLen = s * 1.0 + sin(_time * 2 + i) * s * 0.2;
+        final startR = s * 0.75;
+
+        canvas.drawLine(
+          Offset(cos(streamAngle) * startR, sin(streamAngle) * startR),
+          Offset(cos(streamAngle) * streamLen, sin(streamAngle) * streamLen),
+          Paint()
+            ..color = Palette.neonCyan.withValues(alpha: 0.25)
+            ..strokeWidth = 2.0
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+    }
+
+    // === PHASE INDICATORS ===
+    if (!flash && isPhase2) {
+      // Phase 2 warning stripes
+      for (int i = 0; i < 4; i++) {
+        final stripeY = s * 0.65 + i * s * 0.08;
+        canvas.drawLine(
+          Offset(-s * 0.6, stripeY),
+          Offset(s * 0.6, stripeY),
+          Paint()
+            ..color = Palette.alertRed.withValues(
+              alpha: 0.3 * ((_time * 4 + i) % 1.0 < 0.5 ? 1.0 : 0.3),
+            )
+            ..strokeWidth = s * 0.02,
+        );
+      }
+    }
+
+    // === STATUS INDICATOR ===
+    if (!small) {
+      final statusText = isPhase2 ? 'LOCKDOWN' : 'OBSERVING';
+      final statusColor = isPhase2 ? Palette.alertRed : Palette.dataGreen;
+      _drawBossText(
+        canvas,
+        statusText,
+        Offset(0, s * 0.85),
+        statusColor.withValues(alpha: 0.7),
+        s * 0.08,
+      );
+    }
+  }
+
+  void _drawBossText(
+    Canvas canvas,
+    String text,
+    Offset center,
+    Color color,
+    double fontSize,
+  ) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: fontSize,
+          fontFamily: 'monospace',
+          fontWeight: FontWeight.bold,
+          letterSpacing: 3.0,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      center - Offset(textPainter.width / 2, textPainter.height / 2),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // HP BAR — Cyberpunk-styled health indicator
   // ══════════════════════════════════════════════════════════════════════
   void _renderHpBar(Canvas canvas, double s, double fraction) {
     final isBoss = data.kind == EnemyKind.boss;
@@ -1782,38 +1365,57 @@ class Enemy extends PositionComponent with HasGameReference<FpvGame> {
     final barH = isBoss ? 7.0 : 4.5;
     final yOff = -(s * (isBoss ? 0.9 : 0.75)) - barH - 4.0;
 
+    // Background
     canvas.drawRect(
       Rect.fromCenter(center: Offset(0, yOff), width: barW, height: barH),
-      Paint()..color = const Color(0xBB000000),
+      Paint()..color = const Color(0xCC000008),
     );
 
+    // Health color - cyan when healthy, red when low
     final barColor = fraction > 0.5
-        ? Color.lerp(const Color(0xFFFFCC00), const Color(0xFF44FF44), (fraction - 0.5) * 2)!
-        : Color.lerp(const Color(0xFFCC2222), const Color(0xFFFFCC00), fraction * 2)!;
+        ? Color.lerp(
+            Palette.alertAmber,
+            Palette.dataGreen,
+            (fraction - 0.5) * 2,
+          )!
+        : Color.lerp(Palette.alertRed, Palette.alertAmber, fraction * 2)!;
 
     if (fraction > 0) {
+      // Health fill
+      canvas.drawRect(
+        Rect.fromLTWH(-barW / 2, yOff - barH / 2, barW * fraction, barH),
+        Paint()..color = barColor,
+      );
+
+      // Health glow
       canvas.drawRect(
         Rect.fromLTWH(-barW / 2, yOff - barH / 2, barW * fraction, barH),
         Paint()
-          ..color = barColor
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+          ..color = barColor.withValues(alpha: 0.4)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
       );
     }
 
+    // Border
     canvas.drawRect(
       Rect.fromCenter(center: Offset(0, yOff), width: barW, height: barH),
       Paint()
-        ..color = barColor.withValues(alpha: 0.5)
+        ..color = barColor.withValues(alpha: 0.6)
         ..strokeWidth = 1.0
         ..style = PaintingStyle.stroke,
     );
 
+    // Boss gets extra warning glow
     if (isBoss) {
       canvas.drawRect(
-        Rect.fromCenter(center: Offset(0, yOff), width: barW * 1.2, height: barH * 2.2),
+        Rect.fromCenter(
+          center: Offset(0, yOff),
+          width: barW * 1.15,
+          height: barH * 2.0,
+        ),
         Paint()
-          ..color = barColor.withValues(alpha: 0.18 + 0.1 * sin(_time * 3.0))
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7.0),
+          ..color = barColor.withValues(alpha: 0.15 + 0.08 * sin(_time * 3.0))
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0),
       );
     }
   }

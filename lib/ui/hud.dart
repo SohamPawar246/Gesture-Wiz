@@ -8,10 +8,14 @@ class HUD extends StatefulWidget {
   final GestureType activeGesture;
   final PlayerStats playerStats;
 
+  /// 0.0–1.0 surveillance level fed from FpvGame/SurveillanceSystem
+  final double surveillanceLevel;
+
   const HUD({
     super.key,
     required this.activeGesture,
     required this.playerStats,
+    this.surveillanceLevel = 0.0,
   });
 
   @override
@@ -26,7 +30,7 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
     super.initState();
     _pulseCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
   }
 
@@ -36,55 +40,62 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
-  String _gestureActionName(GestureType gesture) {
+  // ── Cyberpunk action name mapping ──────────────────────────────
+  String _actionName(GestureType gesture) {
     switch (gesture) {
       case GestureType.none:
         return 'SCANNING...';
       case GestureType.point:
-        return 'FIRE BOLT';
+        return 'DATA SPIKE';
       case GestureType.fist:
-        return 'FORCE PUSH';
+        return 'SYS RESTORE';
       case GestureType.openPalm:
-        return 'WARD SHIELD';
+        return 'FIREWALL';
       case GestureType.pinch:
-        return 'GRIP';
+        return 'HACK GRIP';
       case GestureType.vSign:
-        return 'OVERWATCH PULSE';
+        return 'ZERO DAY';
     }
   }
 
-  IconData _gestureIcon(GestureType gesture) {
+  IconData _actionIcon(GestureType gesture) {
     switch (gesture) {
       case GestureType.none:
         return Icons.sensors;
       case GestureType.point:
-        return Icons.local_fire_department;
+        return Icons.bolt;
       case GestureType.fist:
-        return Icons.sports_mma;
+        return Icons.healing;
       case GestureType.openPalm:
         return Icons.shield;
       case GestureType.pinch:
-        return Icons.pinch;
+        return Icons.link;
       case GestureType.vSign:
-        return Icons.flash_on;
+        return Icons.radio_button_checked;
     }
   }
 
-  Color _gestureColor(GestureType gesture) {
+  Color _actionColor(GestureType gesture) {
     switch (gesture) {
       case GestureType.none:
-        return Palette.uiGrey;
+        return Palette.dataGrey;
       case GestureType.point:
-        return const Color(0xFFFF6622);
+        return Palette.neonCyan;
       case GestureType.fist:
-        return const Color(0xFF9944FF);
+        return Palette.dataGreen;
       case GestureType.openPalm:
-        return const Color(0xFF44DDFF);
+        return Palette.dataBlue;
       case GestureType.pinch:
-        return const Color(0xFF88FF44);
+        return Palette.neonPink;
       case GestureType.vSign:
-        return const Color(0xFFFFFF44);
+        return Palette.alertAmber;
     }
+  }
+
+  // ── Surveillance color ramp ────────────────────────────────────
+  Color _surveillanceColor(double level) {
+    if (level < 0.5) return Color.lerp(Palette.dataGreen, Palette.alertAmber, level * 2)!;
+    return Color.lerp(Palette.alertAmber, Palette.alertRed, (level - 0.5) * 2)!;
   }
 
   @override
@@ -92,288 +103,329 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
     final ps = widget.playerStats;
     final hpFraction = (ps.currentHp / ps.maxHp).clamp(0.0, 1.0);
     final isLowHp = hpFraction < 0.30;
-    final gestureColor = _gestureColor(widget.activeGesture);
+    final surv = widget.surveillanceLevel.clamp(0.0, 1.0);
+    final survColor = _surveillanceColor(surv);
+    final actionColor = _actionColor(widget.activeGesture);
 
     return Positioned.fill(
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(14.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ─── TOP ROW ───────────────────────────────────────
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // LEFT: Vitals panel
-                  _buildVitalsPanel(ps, hpFraction, isLowHp),
+        child: Column(
+          children: [
+            // ── TOP: Surveillance bar ──────────────────────────────
+            _buildSurveillanceBar(surv, survColor),
 
-                  // RIGHT: Combat info
-                  _buildCombatPanel(ps),
-                ],
-              ),
-
-              const Spacer(),
-
-              // ─── BOTTOM: Active spell indicator ────────────────
-              Center(
-                child: AnimatedBuilder(
-                  animation: _pulseCtrl,
-                  builder: (context, _) {
-                    final isActive = widget.activeGesture != GestureType.none;
-                    final glow = isActive ? 0.4 + 0.6 * _pulseCtrl.value : 0.0;
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 28,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: gestureColor.withValues(alpha: 0.08),
-                        border: Border.all(
-                          color: gestureColor.withValues(
-                            alpha: isActive ? 0.7 : 0.3,
-                          ),
-                          width: 1.5,
-                        ),
-                        boxShadow: isActive
-                            ? [
-                                BoxShadow(
-                                  color: gestureColor.withValues(
-                                    alpha: glow * 0.3,
-                                  ),
-                                  blurRadius: 18,
-                                  spreadRadius: 2,
-                                ),
-                                BoxShadow(
-                                  color: gestureColor.withValues(
-                                    alpha: glow * 0.1,
-                                  ),
-                                  blurRadius: 40,
-                                  spreadRadius: 6,
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _gestureIcon(widget.activeGesture),
-                            color: isActive ? gestureColor : Palette.uiGrey,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            _gestureActionName(widget.activeGesture),
-                            style: TextStyle(
-                              color: isActive ? gestureColor : Palette.uiGrey,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              fontFamily: 'monospace',
-                              letterSpacing: 3.5,
-                              shadows: isActive
-                                  ? [
-                                      Shadow(
-                                        blurRadius: 10,
-                                        color: gestureColor.withValues(
-                                          alpha: 0.7,
-                                        ),
-                                      ),
-                                      Shadow(
-                                        blurRadius: 25,
-                                        color: gestureColor.withValues(
-                                          alpha: 0.3,
-                                        ),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+            // ── MAIN BODY ─────────────────────────────────────────
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // LEFT: Vitals
+                    _buildVitals(ps, hpFraction, isLowHp),
+                    const Spacer(),
+                    // RIGHT: Combat stats
+                    _buildCombatStats(ps),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Vitals Panel (HP / Mana / XP) ─────────────────────────────
-  Widget _buildVitalsPanel(PlayerStats ps, double hpFraction, bool isLowHp) {
-    return Container(
-      width: 220,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xCC060C0C),
-        border: Border.all(
-          color: Palette.fireMid.withValues(alpha: 0.2),
-          width: 1.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Palette.fireMid.withValues(alpha: 0.05),
-            blurRadius: 12,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Level row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _label('LV.${ps.level}', Palette.fireGold, 13),
-              _label('${ps.currentXp}/${ps.maxXp} XP', Palette.uiGrey, 10),
-            ],
-          ),
-          const SizedBox(height: 4),
-          _glowBar(ps.currentXp / ps.maxXp, Palette.uiXp, 4),
-
-          const SizedBox(height: 10),
-
-          // HP
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _label('HP', Palette.impactRed, 11),
-              AnimatedBuilder(
-                animation: _pulseCtrl,
-                builder: (context, _) {
-                  final alpha = isLowHp ? 0.6 + 0.4 * _pulseCtrl.value : 1.0;
-                  return Text(
-                    '${ps.currentHp.toInt()}',
-                    style: TextStyle(
-                      color: isLowHp
-                          ? Palette.impactRed.withValues(alpha: alpha)
-                          : Palette.uiGrey,
-                      fontFamily: 'monospace',
-                      fontSize: 11,
-                      fontWeight: isLowHp ? FontWeight.bold : FontWeight.normal,
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          AnimatedBuilder(
-            animation: _pulseCtrl,
-            builder: (context, _) => _glowBar(
-              hpFraction,
-              isLowHp
-                  ? Color.lerp(
-                      Palette.impactRed,
-                      const Color(0xFFFF8844),
-                      _pulseCtrl.value,
-                    )!
-                  : Palette.impactRed,
-              11,
-              glowForce: isLowHp ? 0.3 + 0.4 * _pulseCtrl.value : 0.15,
-              shimmer: !isLowHp,
-              shimmerPhase: _pulseCtrl.value,
             ),
-          ),
 
-          const SizedBox(height: 10),
-
-          // Mana
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _label('MANA', Palette.uiMana, 11),
-              _label('${ps.currentMana.toInt()}', Palette.uiGrey, 10),
-            ],
-          ),
-          const SizedBox(height: 4),
-          AnimatedBuilder(
-            animation: _pulseCtrl,
-            builder: (context, _) => _glowBar(
-              ps.currentMana / ps.maxMana,
-              Palette.uiMana,
-              9,
-              shimmer: true,
-              shimmerPhase: _pulseCtrl.value,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Combat Panel (Wave / Score / Kills) ───────────────────────
-  Widget _buildCombatPanel(PlayerStats ps) {
-    return AnimatedBuilder(
-      animation: _pulseCtrl,
-      builder: (context, _) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Sector name
-            _iconInfoChip(
-              Icons.location_on,
-              ps.currentNodeLabel,
-              Palette.fireGold,
-              Palette.fireDeep,
-            ),
-            if (ps.totalWaves > 1) ...[
-              const SizedBox(height: 6),
-              _iconInfoChip(
-                Icons.waves,
-                'WAVE ${ps.currentWave}/${ps.totalWaves}',
-                Palette.fireGold,
-                Palette.fireDeep,
-              ),
-            ],
-            const SizedBox(height: 6),
-            _iconInfoChip(
-              Icons.star,
-              '${ps.score}',
-              Palette.fireWhite,
-              const Color(0xFF1A1008),
-            ),
-            const SizedBox(height: 6),
-            _iconInfoChip(
-              Icons.dangerous,
-              '${ps.killCount} KILLS',
-              Palette.impactPink,
-              const Color(0xFF1A0808),
+            // ── BOTTOM: Active action indicator ───────────────────
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: _buildActionIndicator(actionColor),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ── Surveillance Bar ──────────────────────────────────────────
+  Widget _buildSurveillanceBar(double level, Color color) {
+    final isCritical = level > 0.75;
+
+    return AnimatedBuilder(
+      animation: _pulseCtrl,
+      builder: (context, child) {
+        final pulse = isCritical ? 0.7 + 0.3 * _pulseCtrl.value : 1.0;
+        return Container(
+          margin: const EdgeInsets.fromLTRB(14, 8, 14, 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Palette.bgPanel.withValues(alpha: 0.85),
+            border: Border.all(
+              color: color.withValues(alpha: 0.35 * pulse),
+              width: 1.0,
+            ),
+            boxShadow: isCritical
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.2 * pulse),
+                      blurRadius: 12,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.remove_red_eye,
+                color: color.withValues(alpha: 0.9 * pulse),
+                size: 14,
+              ),
+              const SizedBox(width: 8),
+              _label('SURVEILLANCE', color.withValues(alpha: 0.7), 10),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _glowBar(
+                  level,
+                  color,
+                  8,
+                  glowForce: isCritical ? 0.3 * pulse : 0.12,
+                  shimmer: !isCritical,
+                  shimmerPhase: _pulseCtrl.value,
+                ),
+              ),
+              const SizedBox(width: 8),
+              _label(
+                '${(level * 100).toInt()}%',
+                color.withValues(alpha: pulse),
+                11,
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _iconInfoChip(IconData icon, String text, Color color, Color bgColor) {
+  // ── Vitals Panel ──────────────────────────────────────────────
+  Widget _buildVitals(PlayerStats ps, double hpFraction, bool isLowHp) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Container(
+        width: 200,
+        padding: const EdgeInsets.all(11),
+        decoration: BoxDecoration(
+          color: Palette.bgPanel.withValues(alpha: 0.88),
+          border: Border.all(
+            color: Palette.neonCyan.withValues(alpha: 0.18),
+            width: 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Palette.neonCyan.withValues(alpha: 0.04),
+              blurRadius: 10,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Level + XP
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _label('LV.${ps.level}', Palette.neonCyan, 13),
+                _label('${ps.currentXp}/${ps.maxXp} XP', Palette.dataGrey, 10),
+              ],
+            ),
+            const SizedBox(height: 4),
+            _glowBar(ps.currentXp / ps.maxXp, Palette.dataPurple, 4),
+
+            const SizedBox(height: 10),
+
+            // HP
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _label('HP', Palette.alertRed, 11),
+                AnimatedBuilder(
+                  animation: _pulseCtrl,
+                  builder: (context, child) {
+                    final alpha = isLowHp ? 0.6 + 0.4 * _pulseCtrl.value : 1.0;
+                    return Text(
+                      '${ps.currentHp.toInt()}',
+                      style: TextStyle(
+                        color: isLowHp
+                            ? Palette.alertRed.withValues(alpha: alpha)
+                            : Palette.dataGrey,
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        fontWeight: isLowHp ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            AnimatedBuilder(
+              animation: _pulseCtrl,
+              builder: (context, child) => _glowBar(
+                hpFraction,
+                isLowHp
+                    ? Color.lerp(
+                        Palette.alertRed,
+                        Palette.alertOrange,
+                        _pulseCtrl.value,
+                      )!
+                    : Palette.dataGreen,
+                11,
+                glowForce: isLowHp ? 0.3 + 0.35 * _pulseCtrl.value : 0.12,
+                shimmer: !isLowHp,
+                shimmerPhase: _pulseCtrl.value,
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // Mana
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _label('MANA', Palette.dataBlue, 11),
+                _label('${ps.currentMana.toInt()}', Palette.dataGrey, 10),
+              ],
+            ),
+            const SizedBox(height: 4),
+            AnimatedBuilder(
+              animation: _pulseCtrl,
+              builder: (context, child) => _glowBar(
+                ps.currentMana / ps.maxMana,
+                Palette.dataBlue,
+                9,
+                shimmer: true,
+                shimmerPhase: _pulseCtrl.value,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Combat Stats Panel ────────────────────────────────────────
+  Widget _buildCombatStats(PlayerStats ps) {
+    return AnimatedBuilder(
+      animation: _pulseCtrl,
+      builder: (context, child) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _chip(Icons.location_on_outlined, ps.currentNodeLabel, Palette.neonCyan),
+              if (ps.totalWaves > 1) ...[
+                const SizedBox(height: 5),
+                _chip(
+                  Icons.wifi_tethering,
+                  'WAVE ${ps.currentWave}/${ps.totalWaves}',
+                  Palette.alertAmber,
+                ),
+              ],
+              const SizedBox(height: 5),
+              _chip(Icons.star_outline, '${ps.score}', Palette.dataWhite),
+              const SizedBox(height: 5),
+              _chip(Icons.close, '${ps.killCount} KILLS', Palette.neonPink),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Active Action Indicator ───────────────────────────────────
+  Widget _buildActionIndicator(Color color) {
+    return AnimatedBuilder(
+      animation: _pulseCtrl,
+      builder: (context, child) {
+        final isActive = widget.activeGesture != GestureType.none;
+        final glow = isActive ? 0.4 + 0.6 * _pulseCtrl.value : 0.0;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.07),
+            border: Border.all(
+              color: color.withValues(alpha: isActive ? 0.65 : 0.2),
+              width: 1.5,
+            ),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: glow * 0.25),
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                    ),
+                    BoxShadow(
+                      color: color.withValues(alpha: glow * 0.08),
+                      blurRadius: 40,
+                      spreadRadius: 6,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _actionIcon(widget.activeGesture),
+                color: isActive ? color : Palette.dataGrey,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                _actionName(widget.activeGesture),
+                style: TextStyle(
+                  color: isActive ? color : Palette.dataGrey,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  fontFamily: 'monospace',
+                  letterSpacing: 3.5,
+                  shadows: isActive
+                      ? [
+                          Shadow(blurRadius: 10, color: color.withValues(alpha: 0.7)),
+                          Shadow(blurRadius: 25, color: color.withValues(alpha: 0.3)),
+                        ]
+                      : null,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────
+  Widget _chip(IconData icon, String text, Color color) {
     final glow = _pulseCtrl.value;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: bgColor.withValues(alpha: 0.85),
+        color: Palette.bgPanel.withValues(alpha: 0.85),
         border: Border.all(
-          color: color.withValues(alpha: 0.35 + 0.15 * glow),
+          color: color.withValues(alpha: 0.3 + 0.12 * glow),
           width: 1.0,
         ),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.06 + 0.06 * glow),
-            blurRadius: 8 + 4 * glow,
+            color: color.withValues(alpha: 0.05 + 0.04 * glow),
+            blurRadius: 8 + 3 * glow,
           ),
         ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 14),
+          Icon(icon, color: color, size: 13),
           const SizedBox(width: 6),
           Text(
             text,
@@ -381,11 +433,9 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
               color: color,
               fontWeight: FontWeight.w900,
               fontFamily: 'monospace',
-              fontSize: 13,
+              fontSize: 12,
               letterSpacing: 2.0,
-              shadows: [
-                Shadow(blurRadius: 6, color: color.withValues(alpha: 0.4)),
-              ],
+              shadows: [Shadow(blurRadius: 5, color: color.withValues(alpha: 0.4))],
             ),
           ),
         ],
@@ -421,8 +471,8 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
         Container(
           height: height,
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            border: Border.all(color: color.withValues(alpha: 0.2), width: 0.5),
+            color: color.withValues(alpha: 0.10),
+            border: Border.all(color: color.withValues(alpha: 0.18), width: 0.5),
           ),
         ),
         // Fill
@@ -433,63 +483,55 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  color.withValues(alpha: 0.7),
+                  color.withValues(alpha: 0.65),
                   color,
-                  Color.lerp(color, Colors.white, 0.3)!,
+                  Color.lerp(color, Colors.white, 0.25)!,
                 ],
                 stops: const [0.0, 0.6, 1.0],
               ),
               boxShadow: [
                 BoxShadow(
                   color: color.withValues(alpha: glowForce),
-                  blurRadius: 6,
+                  blurRadius: 5,
                   spreadRadius: 1,
                 ),
               ],
             ),
           ),
         ),
-        // Shimmer highlight — animated bright streak moving across bar
+        // Shimmer
         if (shimmer && value > 0.05)
           FractionallySizedBox(
             widthFactor: value.clamp(0.0, 1.0),
             child: ClipRect(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final barWidth = constraints.maxWidth;
-                  if (barWidth <= 0) return const SizedBox.shrink();
-                  final shimmerX = shimmerPhase * (barWidth + 30) - 15;
+                  final bw = constraints.maxWidth;
+                  if (bw <= 0) return const SizedBox.shrink();
+                  final sx = shimmerPhase * (bw + 30) - 15;
                   return SizedBox(
                     height: height,
                     child: CustomPaint(
-                      painter: _ShimmerPainter(
-                        x: shimmerX,
-                        color: Colors.white,
-                        height: height,
-                      ),
+                      painter: _ShimmerPainter(x: sx, color: Colors.white, height: height),
                     ),
                   );
                 },
               ),
             ),
           ),
-        // Leading-edge glow dot
+        // Leading edge dot
         if (value > 0.02 && value < 0.98)
           FractionallySizedBox(
             widthFactor: value.clamp(0.0, 1.0),
             child: Align(
               alignment: Alignment.centerRight,
               child: Container(
-                width: 4,
+                width: 3,
                 height: height + 2,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.7),
                   boxShadow: [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.8),
-                      blurRadius: 6,
-                      spreadRadius: 1,
-                    ),
+                    BoxShadow(color: color.withValues(alpha: 0.8), blurRadius: 5),
                   ],
                 ),
               ),
@@ -500,14 +542,10 @@ class _HUDState extends State<HUD> with SingleTickerProviderStateMixin {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// Shimmer painter — draws a moving highlight streak on bars
-// ══════════════════════════════════════════════════════════════════════════
 class _ShimmerPainter extends CustomPainter {
   final double x;
   final Color color;
   final double height;
-
   _ShimmerPainter({required this.x, required this.color, required this.height});
 
   @override
@@ -517,11 +555,7 @@ class _ShimmerPainter extends CustomPainter {
       rect,
       Paint()
         ..shader = LinearGradient(
-          colors: [
-            Colors.transparent,
-            color.withValues(alpha: 0.25),
-            Colors.transparent,
-          ],
+          colors: [Colors.transparent, color.withValues(alpha: 0.22), Colors.transparent],
         ).createShader(rect),
     );
   }

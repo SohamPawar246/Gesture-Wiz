@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../game/palette.dart';
 import '../models/gesture_cursor_controller.dart';
 import 'gesture_cursor_overlay.dart';
+import '../systems/audio_manager.dart';
 
 class CreditsScreen extends StatefulWidget {
   final VoidCallback onContinue;
@@ -26,6 +27,8 @@ class _CreditsScreenState extends State<CreditsScreen>
   @override
   void initState() {
     super.initState();
+    
+    AudioManager.playCreditsMusic();
 
     _fadeCtrl = AnimationController(
       vsync: this,

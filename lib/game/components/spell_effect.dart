@@ -6,8 +6,8 @@ import 'package:flame/particles.dart';
 
 import '../palette.dart';
 
-/// Fire-themed spell effect in the Jon Wick retro aesthetic.
-/// Spawns a particle burst + floating spell name + lingering ember trail.
+/// Cyberpunk spell effect — digital impact with hexagonal patterns,
+/// data fragments, and glitch aesthetics.
 class SpellEffect extends PositionComponent {
   final Color effectColor;
   final String spellName;
@@ -20,45 +20,46 @@ class SpellEffect extends PositionComponent {
 
   @override
   Future<void> onLoad() async {
-    // 0. Immediate impact shockwave ring (expanding, short-lived)
-    final shockColor = effectColor;
+    final random = Random();
+
+    // 0. Hexagonal shockwave ring (expanding, digital style)
     add(
       ParticleSystemComponent(
         particle: Particle.generate(
           count: 1,
-          lifespan: 0.5,
+          lifespan: 0.6,
           generator: (_) => ComputedParticle(
             renderer: (canvas, particle) {
               final progress = particle.progress;
-              final radius = 20 + progress * 140;
+              final radius = 25 + progress * 130;
               final alpha = (1.0 - progress).clamp(0.0, 1.0);
 
-              // Outer glow ring
-              canvas.drawCircle(
-                Offset.zero,
-                radius,
+              // Outer hex ring glow
+              final hexPath = _createHexPath(Offset.zero, radius);
+              canvas.drawPath(
+                hexPath,
                 Paint()
-                  ..color = shockColor.withValues(alpha: alpha * 0.25)
-                  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18)
+                  ..color = effectColor.withValues(alpha: alpha * 0.3)
+                  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15)
                   ..style = PaintingStyle.stroke
-                  ..strokeWidth = 18 * (1 - progress),
+                  ..strokeWidth = 15 * (1 - progress),
               );
-              // Crisp ring
-              canvas.drawCircle(
-                Offset.zero,
-                radius,
+
+              // Crisp hex ring
+              canvas.drawPath(
+                hexPath,
                 Paint()
-                  ..color = Palette.fireWhite.withValues(alpha: alpha * 0.7)
+                  ..color = Palette.dataWhite.withValues(alpha: alpha * 0.8)
                   ..style = PaintingStyle.stroke
-                  ..strokeWidth = 3 * (1 - progress),
+                  ..strokeWidth = 2.5 * (1 - progress * 0.5),
               );
-              // Inner fill
-              canvas.drawCircle(
-                Offset.zero,
-                radius * 0.6,
+
+              // Inner digital fill
+              canvas.drawPath(
+                _createHexPath(Offset.zero, radius * 0.5),
                 Paint()
-                  ..color = shockColor.withValues(alpha: alpha * 0.08)
-                  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30),
+                  ..color = effectColor.withValues(alpha: alpha * 0.1)
+                  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
               );
             },
           ),
@@ -66,111 +67,142 @@ class SpellEffect extends PositionComponent {
       ),
     );
 
-    // 1. Spell Name — floating text with warm glow (floats upward)
+    // 1. Spell Name — floating with digital glow
     final textComp = TextComponent(
       text: spellName.toUpperCase(),
       textRenderer: TextPaint(
         style: TextStyle(
-          color: Palette.fireGold,
-          fontSize: 30,
+          color: Palette.dataWhite,
+          fontSize: 28,
           fontWeight: FontWeight.w900,
           fontFamily: 'monospace',
-          letterSpacing: 3.5,
-          shadows: const [
-            Shadow(blurRadius: 14, color: Palette.fireDeep),
-            Shadow(blurRadius: 28, color: Palette.fireDeep),
-            Shadow(blurRadius: 6, color: Palette.fireWhite),
+          letterSpacing: 4.0,
+          shadows: [
+            Shadow(blurRadius: 12, color: effectColor),
+            Shadow(blurRadius: 24, color: effectColor.withValues(alpha: 0.5)),
+            const Shadow(blurRadius: 4, color: Palette.dataWhite),
           ],
         ),
       ),
       anchor: Anchor.center,
-      position: Vector2(0, -55),
+      position: Vector2(0, -50),
     );
     textComp.add(
       MoveByEffect(
-        Vector2(0, -70),
-        EffectController(duration: 1.6, curve: Curves.decelerate),
+        Vector2(0, -60),
+        EffectController(duration: 1.4, curve: Curves.easeOut),
       ),
     );
     add(textComp);
 
-    // 2. Main Fire Burst — large explosive particles
-    final random = Random();
-    final mainBurst = ParticleSystemComponent(
+    // 2. Data Fragment Burst — geometric shards exploding outward
+    final fragmentBurst = ParticleSystemComponent(
       particle: Particle.generate(
-        count: 60,
-        lifespan: 1.8,
+        count: 40,
+        lifespan: 1.5,
         generator: (i) {
-          final speed = random.nextDouble() * 250 + 80;
+          final speed = random.nextDouble() * 200 + 100;
           final angle = random.nextDouble() * 2 * pi;
           final vx = cos(angle) * speed;
           final vy = sin(angle) * speed;
 
-          // Blend between spell color and fire gold
+          // Mix between spell color and cyan
           final t = random.nextDouble();
-          final particleColor = Color.lerp(effectColor, Palette.fireGold, t)!;
+          final particleColor = Color.lerp(
+            effectColor,
+            Palette.neonCyan,
+            t * 0.5,
+          )!;
+          final rotation = random.nextDouble() * pi * 2;
+          final size = 4.0 + random.nextDouble() * 8.0;
 
           return AcceleratedParticle(
-            acceleration: Vector2(0, 120), // Gravity
+            acceleration: Vector2(0, 60),
             speed: Vector2(vx, vy),
             position: Vector2.zero(),
             child: ComputedParticle(
               renderer: (canvas, particle) {
                 final progress = particle.progress;
                 final alpha = (1.0 - progress).clamp(0.0, 1.0);
-                final size = (10.0 * (1.0 - progress * 0.5));
+                final currentRot = rotation + progress * pi;
 
-                // Outer glow
-                final glowPaint = Paint()
-                  ..color = particleColor.withValues(alpha: alpha * 0.3)
-                  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0);
-                canvas.drawCircle(Offset.zero, size * 2.0, glowPaint);
+                canvas.save();
+                canvas.rotate(currentRot);
 
-                // Core
-                final paint = Paint()
-                  ..color = particleColor.withValues(alpha: alpha)
-                  ..style = PaintingStyle.fill;
-                canvas.drawCircle(Offset.zero, size, paint);
+                // Glow
+                canvas.drawRect(
+                  Rect.fromCenter(
+                    center: Offset.zero,
+                    width: size * 2.5,
+                    height: size * 1.5,
+                  ),
+                  Paint()
+                    ..color = particleColor.withValues(alpha: alpha * 0.4)
+                    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+                );
 
-                // White-hot center (early particles)
-                if (progress < 0.3) {
-                  final whitePaint = Paint()
-                    ..color = Palette.fireWhite.withValues(alpha: alpha * 0.8);
-                  canvas.drawCircle(Offset.zero, size * 0.4, whitePaint);
+                // Core fragment (rectangular)
+                canvas.drawRect(
+                  Rect.fromCenter(
+                    center: Offset.zero,
+                    width: size * 1.2,
+                    height: size * 0.6,
+                  ),
+                  Paint()..color = particleColor.withValues(alpha: alpha),
+                );
+
+                // Bright edge
+                if (progress < 0.4) {
+                  canvas.drawRect(
+                    Rect.fromCenter(
+                      center: Offset.zero,
+                      width: size * 0.8,
+                      height: size * 0.3,
+                    ),
+                    Paint()
+                      ..color = Palette.dataWhite.withValues(
+                        alpha: alpha * 0.7,
+                      ),
+                  );
                 }
+
+                canvas.restore();
               },
             ),
           );
         },
       ),
     );
-    add(mainBurst);
+    add(fragmentBurst);
 
-    // 3. Spark Streaks — fast, thin sparks shooting outward
-    final sparkBurst = ParticleSystemComponent(
+    // 3. Scan Lines — horizontal digital distortion expanding outward
+    final scanBurst = ParticleSystemComponent(
       particle: Particle.generate(
-        count: 20,
-        lifespan: 0.8,
+        count: 12,
+        lifespan: 0.7,
         generator: (i) {
-          final speed = random.nextDouble() * 400 + 200;
-          final angle = random.nextDouble() * 2 * pi;
+          final speed = 150 + random.nextDouble() * 200;
+          final direction = i % 2 == 0 ? 1.0 : -1.0;
+          final yOffset = (random.nextDouble() - 0.5) * 60;
 
           return AcceleratedParticle(
-            acceleration: Vector2(0, 200),
-            speed: Vector2(cos(angle) * speed, sin(angle) * speed),
-            position: Vector2.zero(),
+            acceleration: Vector2.zero(),
+            speed: Vector2(direction * speed, 0),
+            position: Vector2(0, yOffset),
             child: ComputedParticle(
               renderer: (canvas, particle) {
                 final alpha = (1.0 - particle.progress).clamp(0.0, 1.0);
-                final paint = Paint()
-                  ..color = Palette.fireBright.withValues(alpha: alpha)
-                  ..strokeWidth = 2.0
-                  ..strokeCap = StrokeCap.round;
-                // Draw a short streak
-                canvas.drawLine(
-                  Offset.zero,
-                  Offset(cos(angle) * 8, sin(angle) * 8),
-                  paint,
+                final width = 30 + particle.progress * 50;
+
+                canvas.drawRect(
+                  Rect.fromCenter(
+                    center: Offset.zero,
+                    width: width,
+                    height: 2.0,
+                  ),
+                  Paint()
+                    ..color = effectColor.withValues(alpha: alpha * 0.6)
+                    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
                 );
               },
             ),
@@ -178,51 +210,88 @@ class SpellEffect extends PositionComponent {
         },
       ),
     );
-    add(sparkBurst);
+    add(scanBurst);
 
-    // 4. Lingering Embers — slow, floating upward
-    final emberTrail = ParticleSystemComponent(
+    // 4. Data Motes — small pixels floating upward
+    final dataMotes = ParticleSystemComponent(
       particle: Particle.generate(
-        count: 15,
-        lifespan: 2.5,
+        count: 20,
+        lifespan: 2.2,
         generator: (i) {
-          final drift = (random.nextDouble() - 0.5) * 60;
+          final drift = (random.nextDouble() - 0.5) * 80;
+          final moteColors = [
+            Palette.neonCyan,
+            Palette.neonPink,
+            Palette.dataGreen,
+            effectColor,
+          ];
+          final moteColor = moteColors[random.nextInt(moteColors.length)];
 
           return AcceleratedParticle(
-            acceleration: Vector2(0, -30), // Float upward
-            speed: Vector2(drift, -random.nextDouble() * 40 - 20),
+            acceleration: Vector2(0, -20),
+            speed: Vector2(drift, -random.nextDouble() * 50 - 30),
             position: Vector2(
-              (random.nextDouble() - 0.5) * 40,
-              (random.nextDouble() - 0.5) * 40,
+              (random.nextDouble() - 0.5) * 60,
+              (random.nextDouble() - 0.5) * 60,
             ),
             child: ComputedParticle(
               renderer: (canvas, particle) {
-                final alpha = (1.0 - particle.progress) * 0.7;
-                final size = 2.0 + random.nextDouble() * 2.0;
+                final alpha = (1.0 - particle.progress) * 0.8;
+                final size = 2.0 + random.nextDouble() * 3.0;
 
-                final glowPaint = Paint()
-                  ..color = Palette.fireGold.withValues(alpha: alpha * 0.4)
-                  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
-                canvas.drawCircle(Offset.zero, size * 2, glowPaint);
+                // Pixel glow
+                canvas.drawRect(
+                  Rect.fromCenter(
+                    center: Offset.zero,
+                    width: size * 3,
+                    height: size * 3,
+                  ),
+                  Paint()
+                    ..color = moteColor.withValues(alpha: alpha * 0.3)
+                    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+                );
 
-                final corePaint = Paint()
-                  ..color = Palette.fireBright.withValues(alpha: alpha);
-                canvas.drawCircle(Offset.zero, size, corePaint);
+                // Core pixel
+                canvas.drawRect(
+                  Rect.fromCenter(
+                    center: Offset.zero,
+                    width: size,
+                    height: size,
+                  ),
+                  Paint()..color = moteColor.withValues(alpha: alpha),
+                );
               },
             ),
           );
         },
       ),
     );
-    add(emberTrail);
+    add(dataMotes);
 
     // Auto-remove after effects finish
     add(
       TimerComponent(
-        period: 3.0,
+        period: 2.8,
         removeOnFinish: true,
         onTick: () => removeFromParent(),
       ),
     );
+  }
+
+  /// Creates a hexagonal path centered at the given offset
+  Path _createHexPath(Offset center, double radius) {
+    final path = Path();
+    for (int i = 0; i < 6; i++) {
+      final angle = i * pi / 3 - pi / 6;
+      final x = center.dx + cos(angle) * radius;
+      final y = center.dy + sin(angle) * radius;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    return path;
   }
 }

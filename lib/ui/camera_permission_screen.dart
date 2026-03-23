@@ -109,7 +109,7 @@ class _CameraPermissionScreenState extends State<CameraPermissionScreen>
         // Scanlines overlay (simple dark tint instead of missing image asset)
         IgnorePointer(
           child: Container(
-            color: Palette.scanline,
+            color: Palette.scanLine,
           ),
         ),
 

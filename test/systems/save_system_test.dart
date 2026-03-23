@@ -42,6 +42,7 @@ void main() {
 
     test('should convert to JSON', () {
       const saveData = SaveData(
+        hasSeenCameraPermission: false,
         version: 1,
         level: 3,
         xp: 100,
@@ -64,6 +65,7 @@ void main() {
 
     test('should verify valid checksum', () {
       const saveData = SaveData(
+        hasSeenCameraPermission: false,
         version: 1,
         level: 5,
         xp: 100,
@@ -237,7 +239,8 @@ void main() {
     group('versioned save system', () {
       test('should save and load complete SaveData', () async {
         const saveData = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 7,
           xp: 350,
           unlockedNodes: ['1', '2', '3', '4'],
@@ -270,7 +273,8 @@ void main() {
 
       test('should create backup before overwriting save', () async {
         const firstSave = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 5,
           xp: 100,
           unlockedNodes: ['1', '2'],
@@ -281,7 +285,8 @@ void main() {
         await saveSystem.saveAll(firstSave);
 
         const secondSave = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 10,
           xp: 500,
           unlockedNodes: ['1', '2', '3'],
@@ -304,7 +309,8 @@ void main() {
 
       test('should verify checksum on load', () async {
         const saveData = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 5,
           xp: 200,
           unlockedNodes: ['1', '2'],
@@ -322,7 +328,8 @@ void main() {
       test('should restore from backup if checksum invalid', () async {
         // Save initial data
         const initialSave = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 3,
           xp: 50,
           unlockedNodes: ['1'],
@@ -333,7 +340,8 @@ void main() {
 
         // Save again to create backup of initial save
         const secondSave = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 5,
           xp: 100,
           unlockedNodes: ['1', '2'],
@@ -386,7 +394,8 @@ void main() {
 
       test('should not set migration flag when loading new format', () async {
         const saveData = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 5,
           xp: 100,
           unlockedNodes: ['1', '2'],
@@ -403,7 +412,8 @@ void main() {
       test('should maintain legacy API compatibility after versioned save', () async {
         // Save using new API
         const saveData = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 6,
           xp: 300,
           unlockedNodes: ['1', '2', '3'],
@@ -430,7 +440,8 @@ void main() {
     group('export and import', () {
       test('should export save data as JSON string', () async {
         const saveData = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 5,
           xp: 200,
           unlockedNodes: ['1', '2'],
@@ -449,7 +460,8 @@ void main() {
 
       test('should import save data from JSON string', () async {
         const saveData = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 10,
           xp: 999,
           unlockedNodes: ['1', '2', '3', '4', '5'],
@@ -485,7 +497,8 @@ void main() {
       test('should remove all save data', () async {
         // Create some save data
         const saveData = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 5,
           xp: 100,
           unlockedNodes: ['1', '2'],
@@ -515,7 +528,8 @@ void main() {
       test('should remove backup data', () async {
         // Create save with backup
         const saveData = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 5,
           xp: 100,
           unlockedNodes: ['1', '2'],
@@ -525,7 +539,8 @@ void main() {
         await saveSystem.saveAll(saveData);
 
         const newSave = SaveData(
-          version: 1,
+          hasSeenCameraPermission: false,
+        version: 1,
           level: 10,
           xp: 500,
           unlockedNodes: ['1', '2', '3'],

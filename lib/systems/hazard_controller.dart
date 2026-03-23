@@ -3,8 +3,9 @@ import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
 
 import '../game/fpv_game.dart';
-import '../models/gesture_cursor_controller.dart'; 
 import '../systems/audio_manager.dart';
+import '../systems/achievement_manager.dart';
+import '../game/palette.dart';
 
 class HazardController extends PositionComponent with HasGameReference<FpvGame> {
   final String nodeId;
@@ -65,6 +66,10 @@ class HazardController extends PositionComponent with HasGameReference<FpvGame> 
         _activeDuration -= dt;
         if (_activeDuration <= 0) {
           _hazardActive = false;
+          // Glitch Zone achievement: survived a Server Zero color-invert
+          if (sector == 3) {
+            AchievementManager.instance.unlock('glitch_matrix');
+          }
         }
       }
     }
@@ -129,8 +134,11 @@ class HazardController extends PositionComponent with HasGameReference<FpvGame> 
     }
     
     if (sector == 1 && _hazardActive) {
-      // EMP visual overlay
-      canvas.drawColor(Colors.black.withValues(alpha: 0.3 + 0.1 * sin(_activeDuration * 20)), BlendMode.darken);
+      // EMP visual overlay (Removed darken to keep visibility clear per user request)
+      final empPaint = Paint()
+        ..color = Palette.impactRed.withValues(alpha: 0.15 + 0.1 * sin(_activeDuration * 20))
+        ..blendMode = BlendMode.screen;
+      canvas.drawRect(Rect.fromLTWH(0, 0, game.size.x, game.size.y), empPaint);
     }
 
     if (sector == 3 && _hazardActive) {

@@ -6,15 +6,16 @@ import '../../models/spell.dart';
 import '../palette.dart';
 import 'enemy.dart';
 
-/// A projectile that flies toward a target enemy and damages on contact.
-/// Now works with GameAction (ActionType) instead of the old Spell combos.
+/// Cyberpunk-styled projectile that flies toward targets.
+/// Each action type has a unique digital/neon visual effect.
 class Projectile extends PositionComponent with HasGameReference {
   final GameAction action;
   final Enemy? target;
   final void Function(Enemy enemy, GameAction action)? onHit;
+  final double speedMultiplier;
 
   double _life = 0;
-  final double _speed = 600.0;
+  double get _speed => 600.0 * speedMultiplier;
   bool _hasHit = false;
   double _time = 0;
 
@@ -23,6 +24,7 @@ class Projectile extends PositionComponent with HasGameReference {
     required this.action,
     this.target,
     this.onHit,
+    this.speedMultiplier = 1.0,
   }) : super(position: startPosition.clone(), anchor: Anchor.center);
 
   @override
@@ -41,20 +43,16 @@ class Projectile extends PositionComponent with HasGameReference {
         _moveToTarget(dt);
         break;
       case ActionType.push:
-        // Force push expands outward
-        _life += dt; // Extra speed for expansion
+        _life += dt;
         if (_life > 1.0) removeFromParent();
         break;
       case ActionType.shield:
-        // Shield is sustained — handled elsewhere, this is just visual
         if (_life > 0.5) removeFromParent();
         break;
       case ActionType.grab:
-        // No projectile for grab
         removeFromParent();
         break;
       case ActionType.ultimate:
-        // Overwatch pulse radiates outward
         if (_life > 1.5) removeFromParent();
         break;
     }
@@ -75,7 +73,6 @@ class Projectile extends PositionComponent with HasGameReference {
       dir.normalize();
       position += dir * _speed * dt;
     } else {
-      // No target — fly straight ahead (up screen toward vanishing point)
       position.y -= _speed * dt;
       if (position.y < -50) removeFromParent();
     }
@@ -85,102 +82,270 @@ class Projectile extends PositionComponent with HasGameReference {
   void render(Canvas canvas) {
     switch (action.type) {
       case ActionType.attack:
-        _renderAttackProjectile(canvas);
+        _renderDataSpike(canvas);
         break;
       case ActionType.push:
-        _renderForcePush(canvas);
+        _renderEmpBlast(canvas);
         break;
       case ActionType.shield:
-        _renderShieldWard(canvas);
+        _renderFirewall(canvas);
         break;
       case ActionType.grab:
-        break; // No visual
+        break;
       case ActionType.ultimate:
-        _renderOverwatchPulse(canvas);
+        _renderZeroDay(canvas);
         break;
     }
   }
 
-  void _renderAttackProjectile(Canvas canvas) {
-    final flicker = 0.75 + 0.25 * sin(_time * 12);
+  /// DATA SPIKE — Electric cyan bolt with trailing code fragments
+  void _renderDataSpike(Canvas canvas) {
+    final flicker = 0.75 + 0.25 * sin(_time * 15);
 
     // Outer halo
-    final haloPaint = Paint()
-      ..color = action.effectColor.withValues(alpha: 0.18 * flicker)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22);
-    canvas.drawCircle(Offset.zero, 28, haloPaint);
+    canvas.drawCircle(
+      Offset.zero,
+      30,
+      Paint()
+        ..color = Palette.neonCyan.withValues(alpha: 0.18 * flicker)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
+    );
 
-    // Mid flame body
-    final midPaint = Paint()
-      ..color = Palette.fireMid.withValues(alpha: 0.55 * flicker)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-    canvas.drawCircle(Offset.zero, 16 * flicker, midPaint);
+    // Mid energy body
+    canvas.drawCircle(
+      Offset.zero,
+      18 * flicker,
+      Paint()
+        ..color = action.effectColor.withValues(alpha: 0.5 * flicker)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+    );
 
-    // Bright core
-    final corePaint = Paint()
-      ..color = action.effectColor
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    canvas.drawCircle(Offset.zero, 10, corePaint);
+    // Hexagonal core
+    final hexPath = _createHexPath(Offset.zero, 12);
+    canvas.drawPath(
+      hexPath,
+      Paint()
+        ..color = action.effectColor
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawPath(
+      hexPath,
+      Paint()
+        ..color = Palette.dataWhite.withValues(alpha: 0.8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
 
-    // White-hot nucleus
-    final whitePaint = Paint()..color = Palette.fireWhite;
-    canvas.drawCircle(Offset.zero, 4.5, whitePaint);
+    // White-hot center
+    canvas.drawCircle(Offset.zero, 5, Paint()..color = Palette.dataWhite);
 
-    // Comet tail (offset behind the projectile, drawn as blur streaks)
+    // Data trail behind
     for (int i = 1; i <= 5; i++) {
-      final tailAlpha = (0.3 - i * 0.05) * flicker;
-      final tailPaint = Paint()
-        ..color = Palette.fireGold.withValues(alpha: tailAlpha.clamp(0, 1))
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3.0 + i * 2.0);
-      canvas.drawCircle(
-        Offset(0, i * 10.0),
-        (10 - i * 1.5).clamp(2, 12),
-        tailPaint,
+      final tailAlpha = (0.35 - i * 0.06) * flicker;
+      final offset = Offset(0, i * 12.0);
+
+      // Trail segments (rectangular data bits)
+      canvas.drawRect(
+        Rect.fromCenter(center: offset, width: (8 - i).toDouble(), height: 4),
+        Paint()
+          ..color = Palette.neonCyan.withValues(alpha: tailAlpha.clamp(0, 1))
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2.0 + i),
       );
     }
   }
 
-  void _renderForcePush(Canvas canvas) {
+  /// EMP BLAST — Expanding electromagnetic pulse ring
+  void _renderEmpBlast(Canvas canvas) {
     final expand = (_life / 1.0).clamp(0.0, 1.0);
     final alpha = (1.0 - expand).clamp(0.0, 1.0);
-    final radius = 30 + expand * 150;
+    final radius = 40 + expand * 140;
 
-    // Expanding ring
-    final ringPaint = Paint()
-      ..color = action.effectColor.withValues(alpha: alpha * 0.5)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 10.0 * (1 - expand * 0.5)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawCircle(Offset.zero, radius, ringPaint);
+    // Outer distortion ring
+    canvas.drawCircle(
+      Offset.zero,
+      radius,
+      Paint()
+        ..color = Palette.empPulse.withValues(alpha: alpha * 0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 12.0 * (1 - expand * 0.6)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+    );
 
-    // Inner distortion
-    final innerPaint = Paint()
-      ..color = action.effectColor.withValues(alpha: alpha * 0.15)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
-    canvas.drawCircle(Offset.zero, radius * 0.6, innerPaint);
+    // Mid ring
+    canvas.drawCircle(
+      Offset.zero,
+      radius * 0.8,
+      Paint()
+        ..color = Palette.neonCyan.withValues(alpha: alpha * 0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4.0,
+    );
+
+    // Inner hex pattern
+    if (alpha > 0.3) {
+      final innerHex = _createHexPath(Offset.zero, radius * 0.5);
+      canvas.drawPath(
+        innerHex,
+        Paint()
+          ..color = action.effectColor.withValues(alpha: alpha * 0.2)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15),
+      );
+    }
+
+    // Scan lines radiating outward
+    for (int i = 0; i < 8; i++) {
+      final angle = i * pi / 4 + expand * pi * 0.5;
+      canvas.drawLine(
+        Offset(cos(angle) * radius * 0.3, sin(angle) * radius * 0.3),
+        Offset(cos(angle) * radius, sin(angle) * radius),
+        Paint()
+          ..color = Palette.dataWhite.withValues(alpha: alpha * 0.4)
+          ..strokeWidth = 2.0
+          ..strokeCap = StrokeCap.round,
+      );
+    }
   }
 
-  void _renderShieldWard(Canvas canvas) {
+  /// FIREWALL — Hexagonal honeycomb shield pattern
+  void _renderFirewall(Canvas canvas) {
     final alpha = (1.0 - _life / 0.5).clamp(0.0, 1.0);
+    final pulse = 0.8 + 0.2 * sin(_time * 10);
 
-    // Hexagonal ward glow
-    final wardPaint = Paint()
-      ..color = action.effectColor.withValues(alpha: alpha * 0.4)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-    canvas.drawCircle(Offset.zero, 50, wardPaint);
+    // Outer glow
+    canvas.drawCircle(
+      Offset.zero,
+      55,
+      Paint()
+        ..color = Palette.dataGreen.withValues(alpha: alpha * 0.3 * pulse)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15),
+    );
 
-    // Ward outline
-    final outlinePaint = Paint()
-      ..color = action.effectColor.withValues(alpha: alpha * 0.7)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
+    // Main hexagon
+    final mainHex = _createHexPath(Offset.zero, 45);
+    canvas.drawPath(
+      mainHex,
+      Paint()
+        ..color = action.effectColor.withValues(alpha: alpha * 0.25)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+    );
 
-    // Draw hexagon
+    // Hex outline
+    canvas.drawPath(
+      mainHex,
+      Paint()
+        ..color = Palette.dataGreen.withValues(alpha: alpha * 0.8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0,
+    );
+
+    // Inner honeycomb pattern
+    for (int i = 0; i < 6; i++) {
+      final angle = i * pi / 3;
+      final hx = cos(angle) * 22;
+      final hy = sin(angle) * 22;
+      final innerHex = _createHexPath(Offset(hx, hy), 12);
+      canvas.drawPath(
+        innerHex,
+        Paint()
+          ..color = Palette.dataGreen.withValues(alpha: alpha * 0.5)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+    }
+
+    // Center symbol
+    canvas.drawCircle(
+      Offset.zero,
+      8,
+      Paint()..color = Palette.dataWhite.withValues(alpha: alpha * 0.9),
+    );
+  }
+
+  /// ZERO DAY — Massive screen-wide digital storm
+  void _renderZeroDay(Canvas canvas) {
+    final expand = (_life / 1.5).clamp(0.0, 1.0);
+    final alpha = (1.0 - expand).clamp(0.0, 1.0);
+    final w = game.size.x;
+    final radius = expand * w * 0.85;
+
+    // Massive expanding ring
+    canvas.drawCircle(
+      Offset.zero,
+      radius,
+      Paint()
+        ..color = Palette.alertRed.withValues(alpha: alpha * 0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 18 * (1 - expand * 0.5)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
+    );
+
+    // Secondary ring
+    canvas.drawCircle(
+      Offset.zero,
+      radius * 0.8,
+      Paint()
+        ..color = Palette.neonMagenta.withValues(alpha: alpha * 0.25)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8,
+    );
+
+    // Inner fire
+    canvas.drawCircle(
+      Offset.zero,
+      radius * 0.5,
+      Paint()
+        ..color = Palette.alertRed.withValues(alpha: alpha * 0.15)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 25),
+    );
+
+    // Eye symbol at center (when visible)
+    if (alpha > 0.4) {
+      // Eye outline
+      final eyePath = Path()
+        ..moveTo(-35, 0)
+        ..quadraticBezierTo(0, -22, 35, 0)
+        ..quadraticBezierTo(0, 22, -35, 0);
+
+      canvas.drawPath(
+        eyePath,
+        Paint()
+          ..color = Palette.dataWhite.withValues(alpha: alpha * 0.9)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.5,
+      );
+
+      // Pupil
+      canvas.drawCircle(
+        Offset.zero,
+        8,
+        Paint()..color = Palette.alertRed.withValues(alpha: alpha),
+      );
+      canvas.drawCircle(
+        Offset.zero,
+        4,
+        Paint()..color = Palette.dataWhite.withValues(alpha: alpha * 0.8),
+      );
+    }
+
+    // Glitch scan lines
+    for (int i = 0; i < 6; i++) {
+      final lineY = (sin(_time * 8 + i) * 0.5) * radius;
+      canvas.drawLine(
+        Offset(-radius, lineY),
+        Offset(radius, lineY),
+        Paint()
+          ..color = Palette.dataWhite.withValues(alpha: alpha * 0.2)
+          ..strokeWidth = 2.0,
+      );
+    }
+  }
+
+  Path _createHexPath(Offset center, double radius) {
     final path = Path();
     for (int i = 0; i < 6; i++) {
       final angle = i * pi / 3 - pi / 6;
-      final x = cos(angle) * 40;
-      final y = sin(angle) * 40;
+      final x = center.dx + cos(angle) * radius;
+      final y = center.dy + sin(angle) * radius;
       if (i == 0) {
         path.moveTo(x, y);
       } else {
@@ -188,49 +353,6 @@ class Projectile extends PositionComponent with HasGameReference {
       }
     }
     path.close();
-    canvas.drawPath(path, outlinePaint);
-  }
-
-  void _renderOverwatchPulse(Canvas canvas) {
-    final expand = (_life / 1.5).clamp(0.0, 1.0);
-    final alpha = (1.0 - expand).clamp(0.0, 1.0);
-    final w = game.size.x;
-    final radius = expand * w * 0.8;
-
-    // Massive expanding ring
-    final ringPaint = Paint()
-      ..color = action.effectColor.withValues(alpha: alpha * 0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 15 * (1 - expand)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-    canvas.drawCircle(Offset.zero, radius, ringPaint);
-
-    // Inner fire
-    final firePaint = Paint()
-      ..color = Palette.fireGold.withValues(alpha: alpha * 0.2)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30);
-    canvas.drawCircle(Offset.zero, radius * 0.6, firePaint);
-
-    // Eye symbol at center
-    if (alpha > 0.3) {
-      final eyePaint = Paint()
-        ..color = Colors.white.withValues(alpha: alpha * 0.8)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.0;
-
-      // Simple eye shape
-      final eyePath = Path();
-      eyePath.moveTo(-30, 0);
-      eyePath.quadraticBezierTo(0, -20, 30, 0);
-      eyePath.quadraticBezierTo(0, 20, -30, 0);
-      canvas.drawPath(eyePath, eyePaint);
-
-      // Pupil
-      canvas.drawCircle(
-        Offset.zero,
-        6,
-        Paint()..color = Colors.white.withValues(alpha: alpha),
-      );
-    }
+    return path;
   }
 }

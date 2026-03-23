@@ -20,13 +20,14 @@ import '../models/enemy_type.dart';
 import 'palette.dart';
 import 'components/virtual_hand.dart';
 import 'components/spell_effect.dart';
-import 'components/dungeon_background.dart';
+import 'components/cyber_corridor.dart';
 import 'components/screen_shake.dart';
 import 'components/retro_overlay.dart';
 import 'components/enemy.dart';
 import 'components/projectile.dart';
 import 'components/floating_text.dart';
 import 'components/damage_flash.dart';
+import 'components/screen_effects.dart';
 import 'components/death_pop.dart';
 import 'components/impact_frame.dart';
 import 'components/texel_splat.dart';
@@ -35,7 +36,6 @@ import '../systems/performance_monitor.dart';
 import '../systems/surveillance_system.dart';
 import '../systems/hazard_controller.dart';
 import '../models/difficulty.dart';
-import '../models/spell_upgrade.dart';
 import 'components/artifact_item.dart';
 import '../systems/achievement_manager.dart';
 
@@ -43,9 +43,10 @@ class FpvGame extends FlameGame
     with MouseMovementDetector, TapCallbacks, SecondaryTapCallbacks {
   late CoordinateMapper _mapper;
   final Map<int, VirtualHand> _hands = {};
-  late DungeonBackground _background;
+  late CyberCorridor _background;
   late ScreenShake _screenShake;
   late DamageFlash _damageFlash;
+  late ScreenEffects _screenEffects;
 
   // Big Brother surveillance system
   final SurveillanceSystem _surveillance = SurveillanceSystem();
@@ -79,7 +80,6 @@ class FpvGame extends FlameGame
   Vector2 _grabHandPos = Vector2.zero();
   Vector2 _prevGrabHandPos = Vector2.zero();
   double _grabDotTimer = 0;
-  double _artifactPullTimer = 0;
 
   // Gesture Subsystem — per hand
   final RuleBasedRecognizer _gestureRecognizer = RuleBasedRecognizer();
@@ -139,14 +139,22 @@ class FpvGame extends FlameGame
   bool justCastSpellThisFrame = false;
 
   // Expose Hazard States
-  bool get isEmpActive => children.whereType<HazardController>().firstOrNull?.isEmpActive ?? false;
-  bool get isGlitchActive => children.whereType<HazardController>().firstOrNull?.isGlitchActive ?? false;
+  bool get isEmpActive =>
+      children.whereType<HazardController>().firstOrNull?.isEmpActive ?? false;
+  bool get isGlitchActive =>
+      children.whereType<HazardController>().firstOrNull?.isGlitchActive ??
+      false;
 
   // Difficulty setting
   Difficulty difficulty;
 
   /// Expose method for boss and other systems to spawn specific enemies
-  void spawnEnemyByType(EnemyKind kind, {double? startDepth, double? corridorX, double? corridorY}) {
+  void spawnEnemyByType(
+    EnemyKind kind, {
+    double? startDepth,
+    double? corridorX,
+    double? corridorY,
+  }) {
     final baseData = EnemyData.table[kind]!;
     final data = baseData.scaled(
       healthMult: difficulty.enemyHealthMultiplier,
@@ -183,12 +191,11 @@ class FpvGame extends FlameGame
     await super.onLoad();
 
     // Initialize action system with upgrade state
-    _actionSystem = ActionSystem.theEye()
-      ..upgradeState = playerStats.upgrades;
+    _actionSystem = ActionSystem.theEye()..upgradeState = playerStats.upgrades;
     _mapper = CoordinateMapper(size);
 
     // Background
-    _background = DungeonBackground();
+    _background = CyberCorridor();
     add(_background);
 
     // Two hands
@@ -205,6 +212,10 @@ class FpvGame extends FlameGame
     // Damage flash
     _damageFlash = DamageFlash();
     add(_damageFlash);
+
+    // Screen effects (scanlines, vignette, chromatic aberration, glitch)
+    _screenEffects = ScreenEffects();
+    add(_screenEffects);
 
     // 4. Hazards
     add(HazardController(playerStats.currentNodeId));
@@ -337,7 +348,6 @@ class FpvGame extends FlameGame
     _grabHandPos = Vector2.zero();
     _prevGrabHandPos = Vector2.zero();
     _grabDotTimer = 0;
-    _artifactPullTimer = 0;
     _gameTime = 0;
     _perfSyncTimer = 0;
     PerformanceMonitor.instance.reset();
@@ -444,7 +454,8 @@ class FpvGame extends FlameGame
         } else if (handId == 0) {
           // Primary hand lost — fall through to hand-not-tracked logic
           _hands[handId]?.updateLandmarks([], _mapper, dt: dt);
-          if (_grabbedEnemy != null || _grabbedArtifact != null) _releaseGrab(_grabHandPos);
+          if (_grabbedEnemy != null || _grabbedArtifact != null)
+            _releaseGrab(_grabHandPos);
           continue;
         } else {
           _hands[handId]?.updateLandmarks([], _mapper, dt: dt);
@@ -510,7 +521,7 @@ class FpvGame extends FlameGame
       // Detect grab release (gesture transitioned away from pinch)
       if (handId == 0 &&
           stableGesture != GestureType.pinch &&
-         (_grabbedEnemy != null || _grabbedArtifact != null)) {
+          (_grabbedEnemy != null || _grabbedArtifact != null)) {
         _releaseGrab(handPos);
       }
 
@@ -538,9 +549,9 @@ class FpvGame extends FlameGame
       }
 
       // Reset tracking flag for hazards
-    justCastSpellThisFrame = false;
+      justCastSpellThisFrame = false;
 
-    // Gesture callback (from primary hand only)
+      // Gesture callback (from primary hand only)
       if (handId == 0 && onGestureDetected != null) {
         onGestureDetected!(stableGesture);
       }
@@ -554,6 +565,19 @@ class FpvGame extends FlameGame
 
     _actionSystem.update(dt);
     playerStats.regenerateMana(dt);
+
+    // Update background + screen effects alert level based on surveillance
+    _background.alertLevel = _surveillance.detectionLevel;
+    _background.isInCombat = _enemies.isNotEmpty;
+    _screenEffects.setAlertLevel(_surveillance.detectionLevel);
+
+    // Sync surveillance level to playerStats so HUD can display it
+    playerStats.surveillanceLevel = _surveillance.detectionLevel;
+
+    // Trigger glitch effect when Server Zero hazard is active
+    if (isGlitchActive) {
+      _screenEffects.triggerGlitch(intensity: 0.4);
+    }
 
     // --- Wave manager ---
     _waveManager.update(dt);
@@ -616,6 +640,7 @@ class FpvGame extends FlameGame
           playerStats.takeDamage(enemy.data.damage);
           _screenShake.trigger(intensity: 15.0);
           _damageFlash.trigger();
+          _screenEffects.triggerChroma(intensity: 0.75);
           add(
             FloatingText(
               position: Vector2(size.x / 2, size.y * 0.7),
@@ -633,6 +658,18 @@ class FpvGame extends FlameGame
           );
 
           enemy.takeDamage(999);
+
+          // Overshield absorbed hit feedback
+          if (playerStats.hasOvershield) {
+            add(
+              FloatingText(
+                position: Vector2(size.x / 2, size.y * 0.5),
+                text: 'OVERSHIELD ABSORBED',
+                color: const Color(0xFF44FF88),
+                fontSize: 20,
+              ),
+            );
+          }
         }
       }
     }
@@ -693,9 +730,16 @@ class FpvGame extends FlameGame
     playerStats.consumeMana(action.manaCost);
     playerStats.usedAttackThisNode = true;
 
-    // Fail condition for Blacksite
+    // Fail condition for Blacksite - Prevent attack without instant kill
     if (playerStats.currentNodeId == 'secret_2') {
-      playerStats.takeDamage(9999); // Instant fail
+      add(
+        FloatingText(
+          position: position,
+          text: 'WEAPONS DISABLED',
+          color: Colors.redAccent,
+          fontSize: 24,
+        ),
+      );
       return;
     }
 
@@ -714,11 +758,15 @@ class FpvGame extends FlameGame
         ),
       );
     }
+    // Compute projectile speed multiplier from upgrade level
+    final attackLevel = playerStats.upgrades.getLevel(ActionType.attack);
+    final speedMult = attackLevel >= 1 ? 1.15 : 1.0;
     add(
       Projectile(
         startPosition: position,
         action: action,
         target: target,
+        speedMultiplier: speedMult,
         onHit: (enemy, a) => _onProjectileHit(enemy, a),
       ),
     );
@@ -800,7 +848,9 @@ class FpvGame extends FlameGame
     _shieldActive = true;
     _shieldHandPos = position.clone();
     // Base linger 0.3s, +0.5s if shield upgrade level >= 1
-    final bonusLinger = playerStats.upgrades.getLevel(ActionType.shield) >= 1 ? 0.5 : 0.0;
+    final bonusLinger = playerStats.upgrades.getLevel(ActionType.shield) >= 1
+        ? 0.5
+        : 0.0;
     _shieldTimer = 0.3 + bonusLinger;
   }
 
@@ -818,15 +868,66 @@ class FpvGame extends FlameGame
 
     // 1. Try to grab Artifacts FIRST (highest priority)
     if (_grabbedEnemy == null && _grabbedArtifact == null) {
-      final artifacts = children.whereType<ArtifactItem>().where((a) => !a.isCollected);
+      final artifacts = children.whereType<ArtifactItem>().where(
+        (a) => !a.isCollected,
+      );
       for (final a in artifacts) {
         if (!a.isTargeted) {
           final dist = (a.position - position).length;
-          if (dist < action.radius * 1.5) { // Slightly forgiving grab radius
+          if (dist < action.radius * 1.5) {
+            // Slightly forgiving grab radius
             a.isTargeted = true;
-            _grabbedArtifact = a;
-            _artifactPullTimer = 0;
-            AudioManager.playSfx('shield.wav', volume: 0.3); // Magnet sound
+            a.isCollected = true;
+            a.removeFromParent();
+
+            AudioManager.playSfx('buff.wav', volume: 0.6);
+            add(
+              FloatingText(
+                position: position.clone(),
+                text: '${a.label} ACQUIRED',
+                color: a.color,
+                fontSize: 22,
+              ),
+            );
+            add(DeathPop(position: position.clone(), primaryColor: a.color));
+
+            switch (a.type) {
+              case ArtifactType.mana:
+                playerStats.addMana(playerStats.maxMana); // Max restore
+                break;
+              case ArtifactType.jammer:
+                surveillance.isJammed = true;
+                add(
+                  TimerComponent(
+                    period: 5.0,
+                    removeOnFinish: true,
+                    onTick: () {
+                      surveillance.isJammed = false;
+                    },
+                  ),
+                );
+                break;
+              case ArtifactType.haste:
+                playerStats.hasteActive = true;
+                add(
+                  TimerComponent(
+                    period: 5.0,
+                    removeOnFinish: true,
+                    onTick: () {
+                      playerStats.hasteActive = false;
+                    },
+                  ),
+                );
+                break;
+              case ArtifactType.vitality:
+                playerStats.heal(playerStats.maxHp * 0.25); // Heal 25% max HP
+                break;
+            }
+
+            playerStats.artifactsCollectedThisNode++;
+            if (playerStats.artifactsCollectedThisNode >= 5) {
+              AchievementManager.instance.unlock('hoarder');
+            }
             break;
           }
         }
@@ -834,7 +935,7 @@ class FpvGame extends FlameGame
     }
 
     // 2. Try to grab Enemy if no artifact grabbed
-    if (_grabbedArtifact == null && (_grabbedEnemy == null || _grabbedEnemy!.isDead)) {
+    if (_grabbedEnemy == null || _grabbedEnemy!.isDead) {
       _grabbedEnemy = null;
       for (final enemy in _enemies) {
         if (!enemy.isDead && !enemy.isGrabbed) {
@@ -858,65 +959,8 @@ class FpvGame extends FlameGame
       }
     }
 
-    // Handle grabbed Artifact
-    if (_grabbedArtifact != null && !_grabbedArtifact!.isCollected) {
-      _grabbedArtifact!.position.lerp(position, (dt * 15.0).clamp(0.0, 1.0));
-      _artifactPullTimer += dt;
-      
-      final distToHand = (_grabbedArtifact!.position - position).length;
-      if (distToHand < 30.0 || _artifactPullTimer > 1.0) {
-        // Collect!
-        _grabbedArtifact!.isCollected = true;
-        _grabbedArtifact!.removeFromParent();
-        
-        AudioManager.playSfx('buff.wav', volume: 0.6);
-        add(
-          FloatingText(
-            position: position.clone(),
-            text: '${_grabbedArtifact!.label} ACQUIRED',
-            color: _grabbedArtifact!.color,
-            fontSize: 22,
-          ),
-        );
-        add(DeathPop(position: position.clone(), primaryColor: _grabbedArtifact!.color));
-        
-        switch (_grabbedArtifact!.type) {
-          case ArtifactType.mana:
-            playerStats.addMana(playerStats.maxMana); // Max restore
-            break;
-          case ArtifactType.jammer:
-            surveillance.isJammed = true;
-            // Unjam after 5s via a timer component or checking elsewhere. 
-            // We'll queue a delayed action on the game
-            add(TimerComponent(period: 5.0, removeOnFinish: true, onTick: () {
-              surveillance.isJammed = false;
-            }));
-            break;
-          case ArtifactType.haste:
-            playerStats.hasteActive = true;
-            add(TimerComponent(period: 5.0, removeOnFinish: true, onTick: () {
-              playerStats.hasteActive = false;
-            }));
-            break;
-          case ArtifactType.vitality:
-            playerStats.takeDamage(-(playerStats.maxHp * 0.25)); // Heal 25% max HP
-            break;
-        }
-        
-        playerStats.artifactsCollectedThisNode++;
-        if (playerStats.artifactsCollectedThisNode >= 5) {
-          AchievementManager.instance.unlock('hoarder');
-        }
-
-        _grabbedArtifact = null;
-      }
-    }
-
     // Drag grabbed enemy to hand position
     if (_grabbedEnemy != null && !_grabbedEnemy!.isDead) {
-      _grabbedEnemy!.position.lerp(position, (dt * 18.0).clamp(0.0, 1.0));
-
-      // Damage over time (action.damage per second, ticked every 0.5s)
       _grabDotTimer += dt;
       if (_grabDotTimer >= 0.5) {
         _grabDotTimer = 0;
@@ -1023,7 +1067,8 @@ class FpvGame extends FlameGame
     }
 
     // Executioner: Ultimate Lv3 triggers free shield if 3+ enemies killed
-    if (playerStats.upgrades.hasApex(ActionType.ultimate) && enemiesKilled >= 3) {
+    if (playerStats.upgrades.hasApex(ActionType.ultimate) &&
+        enemiesKilled >= 3) {
       _shieldActive = true;
       _shieldHandPos = position.clone(); // Shield centers on current hand
       _shieldTimer = 3.0; // Free shield lasts 3 seconds
@@ -1069,11 +1114,13 @@ class FpvGame extends FlameGame
 
     // Roll for artifact drop (10% chance)
     if (Random().nextDouble() < 0.1) {
-      add(ArtifactItem(
-        depth: enemy.depth,
-        corridorX: enemy.corridorX,
-        corridorY: enemy.corridorY,
-      ));
+      add(
+        ArtifactItem(
+          depth: enemy.depth,
+          corridorX: enemy.corridorX,
+          corridorY: enemy.corridorY,
+        ),
+      );
     }
 
     AudioManager.playSfx('pop.wav', volume: 0.4);
@@ -1193,7 +1240,9 @@ class FpvGame extends FlameGame
 
   void _onProjectileHit(Enemy enemy, GameAction action) {
     // Knight Phalanx Charge block
-    if (enemy.data.kind == EnemyKind.knight && enemy.isKnightCharging && action.type == ActionType.attack) {
+    if (enemy.data.kind == EnemyKind.knight &&
+        enemy.isKnightCharging &&
+        action.type == ActionType.attack) {
       AudioManager.playSfx('shield.wav', volume: 0.5);
       add(
         FloatingText(
